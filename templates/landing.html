@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NetMask Sentinel - Intrusion Detection</title>
+
+  <!-- Bootstrap 3 -->
+  <link href="{{ url_for('static', filename='css/bootstrap.css') }}" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/bootstrap-theme.css') }}" rel="stylesheet">
+  
+  <!-- Custom CSS -->
+  <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css?family=Montserrat:300,400,500,600,700|Open+Sans:300,400,700" rel="stylesheet">
+
+  <!-- FontAwesome -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-bg-image"></div>
+    <nav class="navbar">
+      <div id="menu-toggle">
+        <div class="hamburger">
+          <span class="line"></span>
+          <span class="line"></span>
+          <span class="line"></span>
+        </div>
+        <div class="cross">
+          <span class="line"></span>
+          <span class="line"></span>
+        </div>
+      </div>
+      <ul class="main-nav">
+        <li><a href="{{ url_for('landing') }}" {% if request.endpoint == 'landing' %}class="active"{% endif %}>Home</a></li>
+        {% if not session.logged_in %}
+          <li><a href="#" id="navLogin">Login</a></li>
+          <li><a href="#" id="navSignup">Signup</a></li>
+        {% else %}
+          <li><a href="{{ url_for('capture') }}">Dashboard</a></li>
+          <li><a href="{{ url_for('logout') }}">Logout</a></li>
+        {% endif %}
+      </ul>
+    </nav>
+    <div class="container">
+      <div class="row">
+        <div class="col-md-10 col-md-offset-1 text-center">
+          <div class="hero-text">
+            <h1><span>NetMask Sentinel</span><br>Network Defense</h1>
+            <h3>Professional AI-driven monitoring for real-time intrusion detection.</h3>
+            <div style="margin-top: 18px; font-size: 1.15em; line-height: 1.8; color: rgba(255,255,255,0.92);">
+              <div><i class="fas fa-shield-alt"></i> Real-time threat visibility</div>
+              <div><i class="fas fa-chart-line"></i> Clear attack timeline analytics</div>
+              <div><i class="fas fa-database"></i> Structured evidence and reporting</div>
+            </div>
+            {% if session.logged_in %}
+              <a href="{{ url_for('capture') }}" class="btn btn-lg btn-primary" style="margin-top: 25px;">Open Dashboard</a>
+            {% else %}
+              <div class="hero-actions">
+                <button type="button" id="heroLoginBtn" class="btn btn-lg btn-primary">Login</button>
+                <button type="button" id="heroSignupBtn" class="btn btn-lg btn-default hero-secondary-btn">Signup</button>
+                <a href="{{ url_for('guest_access') }}" class="btn btn-lg btn-default hero-secondary-btn">Skip - View Dashboard</a>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  {% if not session.logged_in %}
+  <div id="loginModal" class="custom-modal" aria-hidden="true">
+    <div class="custom-modal-backdrop"></div>
+    <div class="custom-modal-dialog">
+      <button type="button" class="modal-close-btn" data-close="loginModal">&times;</button>
+      <h3 class="card-title text-center">Secure Login</h3>
+      <form id="authForm" action="{{ url_for('login') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="input-group">
+          <span class="input-group-text"><i class="fas fa-user"></i></span>
+          <input type="text" class="form-control" id="loginUsername" name="username" placeholder="Username" required>
+        </div>
+        <div class="input-group">
+          <span class="input-group-text"><i class="fas fa-lock"></i></span>
+          <input type="password" class="form-control" id="loginPassword" name="password" placeholder="Password" required>
+        </div>
+        <button type="submit" class="btn btn-lg btn-primary w-100">
+          <span id="submitText">Login</span>
+          <span id="loadingSpinner" class="spinner-border spinner-border-sm d-none" role="status"></span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div id="signupModal" class="custom-modal" aria-hidden="true">
+    <div class="custom-modal-backdrop"></div>
+    <div class="custom-modal-dialog">
+      <button type="button" class="modal-close-btn" data-close="signupModal">&times;</button>
+      <h3 class="card-title text-center">Create Account</h3>
+      <form id="signupFormModal" action="{{ url_for('signup') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="input-group">
+          <span class="input-group-text"><i class="fas fa-id-badge"></i></span>
+          <input type="text" class="form-control" name="fullname" placeholder="Full name" required>
+        </div>
+        <div class="input-group">
+          <span class="input-group-text"><i class="fas fa-envelope"></i></span>
+          <input type="email" class="form-control" name="email" placeholder="Email" required>
+        </div>
+        <div class="input-group">
+          <span class="input-group-text"><i class="fas fa-user"></i></span>
+          <input type="text" class="form-control" name="username" placeholder="Username" required>
+        </div>
+        <div class="input-group">
+          <span class="input-group-text"><i class="fas fa-lock"></i></span>
+          <input type="password" class="form-control" name="password" placeholder="Password" required>
+        </div>
+        <button type="submit" class="btn btn-lg btn-primary w-100">Signup</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- JavaScript -->
+  <script src="{{ url_for('static', filename='js/jquery-2.1.1.js') }}"></script>
+  <script>
+    // ===== Core Functionality =====
+    // Mobile Menu Toggle
+    $('#menu-toggle').click(function(){
+        $(this).toggleClass('open');
+        $('.main-nav').toggleClass('show-it');
+    });
+
+    function openModal(modalId) {
+      $('#' + modalId).addClass('is-open').attr('aria-hidden', 'false');
+    }
+
+    function closeModal(modalId) {
+      $('#' + modalId).removeClass('is-open').attr('aria-hidden', 'true');
+    }
+
+    $('#heroLoginBtn, #navLogin').on('click', function(e){
+      e.preventDefault();
+      openModal('loginModal');
+    });
+
+    $('#heroSignupBtn, #navSignup').on('click', function(e){
+      e.preventDefault();
+      openModal('signupModal');
+    });
+
+    $('.custom-modal-backdrop, .modal-close-btn').on('click', function(){
+      const target = $(this).data('close') || $(this).closest('.custom-modal').attr('id');
+      closeModal(target);
+    });
+
+// ===== Enhanced Login Form =====
+// Login Form Handling
+$('#authForm').on('submit', function(e) {
+    e.preventDefault();
+    
+    const $form = $(this);
+    const $submitBtn = $form.find('button[type="submit"]');
+    const $spinner = $('#loadingSpinner');
+    const $submitText = $('#submitText');
+    
+    // Visual feedback
+    $submitText.text('Authenticating...');
+    $spinner.removeClass('d-none');
+    $submitBtn.prop('disabled', true);
+
+    // Get form data from the active modal form fields
+    const formData = {
+        username: $form.find('input[name="username"]').val().trim(),
+        password: $form.find('input[name="password"]').val()
+    };
+
+    // Validate locally first
+    if (!formData.username || !formData.password) {
+        alert('Username and password are required');
+        $submitText.text('Login');
+        $spinner.addClass('d-none');
+        $submitBtn.prop('disabled', false);
+        return;
+    }
+
+    // AJAX request with improved error handling
+    $.ajax({
+        type: 'POST',
+        url: $form.attr('action'),
+        data: formData,
+        dataType: 'json',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Accept': 'application/json'
+        },
+        success: function(response) {
+            console.log('Login response received', response);
+            if (response.success) {
+                // Redirect to capture page or wherever specified
+                window.location.href = response.redirect || "/capture";
+            } else {
+                // Display error message if provided
+                alert(response.message || 'Login failed. Please try again.');
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Login error:', status, error);
+            let errorMsg = 'Login failed. Please check your credentials.';
+            
+            try {
+                // Try to parse response JSON
+                if (xhr.responseJSON) {
+                    const response = xhr.responseJSON;
+                    if (response && response.message) {
+                        errorMsg = response.message;
+                    }
+                } else if (xhr.responseText) {
+                    // Try to parse the response text as JSON
+                    const response = JSON.parse(xhr.responseText);
+                    if (response && response.message) {
+                        errorMsg = response.message;
+                    }
+                }
+            } catch (e) {
+                console.error('Error parsing error response:', e);
+            }
+            
+            alert(errorMsg);
+        },
+        complete: function() {
+            // Reset button state
+            $submitText.text('Login');
+            $spinner.addClass('d-none');
+            $submitBtn.prop('disabled', false);
+        }
+    });
+});
+
+    $('#signupFormModal').on('submit', function(e) {
+        e.preventDefault();
+        const $form = $(this);
+        $.ajax({
+            type: 'POST',
+            url: $form.attr('action'),
+            data: $form.serialize(),
+            dataType: 'json',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            success: function(response) {
+                if (response.success) {
+                    window.location.href = response.redirect || "/capture";
+                } else {
+                    alert(response.message || 'Signup failed. Please try again.');
+                }
+            },
+            error: function(xhr) {
+                const msg = xhr.responseJSON?.message || 'Signup failed. Please try again.';
+                alert(msg);
+            }
+        });
+    });
+</script>
+</body>
+</html>

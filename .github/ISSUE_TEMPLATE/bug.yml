@@ -1,0 +1,59 @@
+name: Bug report
+description: Report a reproducible defect in NetMask Sentinel
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include credentials, private packet captures, personal data, or unredacted production logs. Report security vulnerabilities privately under the Security tab.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Start with...
+        2. Run...
+        3. Observe...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Packet capture
+        - Flow features
+        - Model inference
+        - Dashboard or notifications
+        - Authentication or Firebase
+        - Evaluation or PCAP replay
+        - Lab traffic generator
+        - Installation or launcher
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Windows version, Python version, Npcap version, browser, and relevant configuration with secrets removed.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted logs or evidence
+      render: shell

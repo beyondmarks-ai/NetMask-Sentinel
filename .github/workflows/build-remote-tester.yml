@@ -1,0 +1,44 @@
+name: Build remote lab tester
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install build dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Test private-target safety controls
+        run: python -m unittest tests.test_lab_traffic -v
+
+      - name: Build standalone tester
+        shell: pwsh
+        run: ./build_remote_tester.ps1 -PythonExecutable python
+
+      - name: Upload tester artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NetMask-Remote-Lab-Test
+          path: dist/NetMask-Remote-Lab-Test.zip
+          if-no-files-found: error
+          retention-days: 30

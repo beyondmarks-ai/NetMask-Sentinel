@@ -1,0 +1,50 @@
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+firebase-adminsdk.json
+firebase-adminsdk*.json
+*service-account*.json
+*serviceAccount*.json
+
+# Runtime data and sensitive captures
+runtime/
+reports/
+*.log
+input_logs.csv
+output_logs.csv
+output_logs_.csv
+*.pcap
+*.pcapng
+
+# Build and release output
+build/
+dist/
+remote-package/
+*.spec
+*.zip
+*.exe
+*.lnk
+SHA256SUMS.txt
+
+# Tool and OS files
+.matplotlib-cache/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+server.stdout.log
+server.stderr.log
+github-release/

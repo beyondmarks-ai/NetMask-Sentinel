@@ -1,0 +1,2 @@
+# Development and release tooling
+pyinstaller==6.21.0PyYAML==6.0.3
