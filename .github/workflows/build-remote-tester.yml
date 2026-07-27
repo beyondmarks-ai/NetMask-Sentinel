@@ -36,7 +36,7 @@ jobs:
         run: ./build_remote_tester.ps1 -PythonExecutable python
 
       - name: Upload tester artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: NetMask-Remote-Lab-Test
           path: dist/NetMask-Remote-Lab-Test.zip
