@@ -37,6 +37,7 @@ class Settings:
     flow_timeout_seconds: int
     incident_window_seconds: int
     cors_origins: tuple[str, ...]
+    lab_alert_token: str
 
     @property
     def production(self) -> bool:
@@ -64,6 +65,7 @@ class Settings:
             flow_timeout_seconds=_int("FLOW_TIMEOUT_SECONDS", 120),
             incident_window_seconds=_int("INCIDENT_WINDOW_SECONDS", 120),
             cors_origins=_origins(os.environ.get("CORS_ORIGINS")),
+            lab_alert_token=os.environ.get("NETMASK_LAB_ALERT_TOKEN", ""),
         )
         if settings.flow_timeout_seconds <= 0 or settings.incident_window_seconds <= 0:
             raise RuntimeError("Timeout settings must be positive")

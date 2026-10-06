@@ -12,6 +12,7 @@ $RequirementsMarker = Join-Path $ProjectDir ".venv\netmask-requirements.sha256"
 $StdoutLog = Join-Path $RuntimeDir "server.stdout.log"
 $StderrLog = Join-Path $RuntimeDir "server.stderr.log"
 $PidFile = Join-Path $RuntimeDir "netmask.pid"
+$LabTokenFile = Join-Path $RuntimeDir "lab-alert.token"
 $HealthUrl = "http://127.0.0.1:5000/health/ready"
 $DashboardUrl = "http://127.0.0.1:5000/guest"
 
@@ -100,6 +101,17 @@ $env:NETMASK_PORT = "5000"
 $env:FLASK_DEBUG = "false"
 $env:CAPTURE_ENABLED = "true"
 $env:MPLCONFIGDIR = Join-Path $ProjectDir ".matplotlib-cache"
+if ([string]::IsNullOrWhiteSpace($env:NETMASK_LAB_ALERT_TOKEN)) {
+    if (Test-Path -LiteralPath $LabTokenFile) {
+        $env:NETMASK_LAB_ALERT_TOKEN = (Get-Content -Raw -LiteralPath $LabTokenFile).Trim()
+    }
+    else {
+        $bytes = New-Object byte[] 32
+        [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+        $env:NETMASK_LAB_ALERT_TOKEN = [Convert]::ToBase64String($bytes)
+        Set-Content -LiteralPath $LabTokenFile -Value $env:NETMASK_LAB_ALERT_TOKEN -NoNewline
+    }
+}
 
 Remove-Item -LiteralPath $StdoutLog, $StderrLog -Force -ErrorAction SilentlyContinue
 $server = Start-Process `
@@ -132,6 +144,7 @@ for ($attempt = 0; $attempt -lt 90; $attempt++) {
 }
 
 if (Test-NetMaskReady) {
+        Save-NetMaskListenerPid
         if (-not $NoBrowser) { Start-Process $DashboardUrl }
         exit 0
     }

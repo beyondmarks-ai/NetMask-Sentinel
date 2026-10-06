@@ -32,10 +32,12 @@ echo Profiles:
 echo   1. baseline  - ordinary low-rate validation
 echo   2. burst     - bounded traffic spike
 echo   3. discovery - bounded private port connection pattern
-set /p CHOICE=Choose [1-3, default 1]:
+echo   4. alert     - guaranteed authorized dashboard notification; no attack payload
+set /p CHOICE=Choose [1-4, default 1]:
 set MODE=baseline
 if "%CHOICE%"=="2" set MODE=burst
 if "%CHOICE%"=="3" set MODE=discovery
+if "%CHOICE%"=="4" set MODE=alert
 echo.
 set /p CONFIRM=Type AUTHORIZED to confirm you have permission:
 if /I not "%CONFIRM%"=="AUTHORIZED" (
@@ -43,10 +45,19 @@ if /I not "%CONFIRM%"=="AUTHORIZED" (
   pause
   exit /b 2
 )
+if "%MODE%"=="alert" (
+  echo On the NetMask computer run Show-LabAlertToken.ps1 and enter its token below.
+  set /p LAB_TOKEN=Lab alert token:
+  if "%LAB_TOKEN%"=="" (
+    echo A lab alert token is required.
+    pause
+    exit /b 2
+  )
+)
 if "%USE_EXE%"=="1" (
-  "%~dp0NetMask-Lab-Test\NetMask-Lab-Test.exe" --target "%TARGET%" --port 5000 --mode "%MODE%" --authorized-lab-use
+  "%~dp0NetMask-Lab-Test\NetMask-Lab-Test.exe" --target "%TARGET%" --port 5000 --mode "%MODE%" --lab-token "%LAB_TOKEN%" --authorized-lab-use
 ) else (
-  %PYTHON_CMD% "%~dp0netmask_lab_traffic.py" --target "%TARGET%" --port 5000 --mode "%MODE%" --authorized-lab-use
+  %PYTHON_CMD% "%~dp0netmask_lab_traffic.py" --target "%TARGET%" --port 5000 --mode "%MODE%" --lab-token "%LAB_TOKEN%" --authorized-lab-use
 )
 echo.
 pause

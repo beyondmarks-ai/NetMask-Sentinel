@@ -27,6 +27,9 @@ Profiles
 - baseline: low-rate normal validation.
 - burst: bounded traffic spike.
 - discovery: bounded connection-only private port pattern.
+- alert: a token-protected, labelled dashboard alert that records the tester's
+  source IP. It sends no attack payload. On the sensor computer, run
+  `Show-LabAlertToken.ps1` and enter that token when prompted.
 
 The NetMask-Lab-Test folder is self-contained and uses no Python installation. Keep the folder and its _internal subfolder together. The included Python
 source is only a fallback and for transparency. The program refuses public IP

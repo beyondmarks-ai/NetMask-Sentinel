@@ -24,7 +24,7 @@ from flask_socketio import SocketIO
 
 from firebase_config import (
     firestore_db, create_user_session, update_global_stats,
-    hash_password, verify_password, get_user_by_username, save_captured_flow,
+    hash_password, verify_password, get_user_by_email, get_user_by_username, create_user, save_captured_flow,
     save_malicious_flow, increment_high_risk_count,
 )
 from netmask.config import Settings
@@ -40,6 +40,15 @@ settings = Settings.from_env()
 def is_local_request():
     try:
         return ipaddress.ip_address(request.remote_addr or "").is_loopback
+    except ValueError:
+        return False
+
+
+def is_private_lab_request() -> bool:
+    """Limit the lab-only alert endpoint to loopback or private-network clients."""
+    try:
+        address = ipaddress.ip_address(request.remote_addr or "")
+        return address.is_loopback or address.is_private or address.is_link_local
     except ValueError:
         return False
 app = Flask(__name__)
@@ -58,6 +67,8 @@ def protect_state_changes():
     if request.method in {"GET", "HEAD", "OPTIONS"}:
         return None
     if request.endpoint == "debug_mock_flow" and settings.debug_routes and is_local_request():
+        return None
+    if request.endpoint == "authorized_lab_alert" and settings.debug_routes:
         return None
     supplied = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token")
     expected = session.get("csrf_token", "")
@@ -499,12 +510,6 @@ def guest_access():
 # Route for handling login form submission
 @app.route('/login', methods=['POST'])
 def login():
-    if not firestore_db:
-        message = "Cloud authentication is unavailable. Use guest access in development."
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return jsonify({"success": False, "message": message}), 503
-        flash(message)
-        return redirect(url_for('landing'))
     try:
         # Get username and password from form or JSON
         if request.is_json:
@@ -534,15 +539,10 @@ def login():
         user_data = None
         user_id = None
         
-        # Strategy 1: Check if the input is an email (has @)
+        # Look up by email or username. This transparently uses the local
+        # account store when Firebase is intentionally not configured.
         if '@' in username:
-            print("Email format detected, trying direct document lookup...")
-            user_ref = firestore_db.collection('users').document(username)
-            user_doc = user_ref.get()
-            if user_doc.exists:
-                user_data = user_doc.to_dict()
-                user_id = username
-                print(f"Found user via direct email lookup: {user_id}")
+            user_data, user_id = get_user_by_email(username)
         
         # Strategy 2: Use the get_user_by_username function
         if not user_data:
@@ -550,17 +550,6 @@ def login():
             user_data, user_id = get_user_by_username(username)
             if user_data:
                 print(f"Found user via username query: {user_id}")
-        
-        # Strategy 3: Try with @example.com appended if no @ in username
-        if not user_data and '@' not in username:
-            print("Trying email with default domain...")
-            email_to_try = f"{username}@example.com"
-            user_ref = firestore_db.collection('users').document(email_to_try)
-            user_doc = user_ref.get()
-            if user_doc.exists:
-                user_data = user_doc.to_dict()
-                user_id = email_to_try
-                print(f"Found user via default domain email: {user_id}")
         
         # Debug output for troubleshooting
         if user_data:
@@ -654,12 +643,6 @@ def capture():
 def signup():
     if request.method == 'GET':
         return render_template('signup.html')
-    if not firestore_db:
-        message = "Cloud account creation is unavailable because Firebase is not configured."
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return jsonify({"success": False, "message": message}), 503
-        flash(message)
-        return render_template('signup.html'), 503
     
     # Check if the request is AJAX
     is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
@@ -690,9 +673,16 @@ def signup():
                 flash(message)
             return render_template('signup.html')
         
-        # Check if email contains @ - if not, add default domain
         if '@' not in email:
-            email = f"{email}@example.com"
+            errors['email'] = 'Enter a valid email address'
+        if len(password) < 12:
+            errors['password'] = 'Password must be at least 12 characters'
+        if errors:
+            if is_ajax:
+                return jsonify({"success": False, "errors": errors}), 400
+            for message in errors.values():
+                flash(message)
+            return render_template('signup.html'), 400
         
         # Check if username already exists
         existing_user, _ = get_user_by_username(username)
@@ -702,9 +692,9 @@ def signup():
             flash('Username already exists')
             return render_template('signup.html')
         
-        # Check if email already exists as a document ID
-        user_ref = firestore_db.collection('users').document(email)
-        if user_ref.get().exists:
+        # Check whether this email is already registered.
+        existing_email, _ = get_user_by_email(email)
+        if existing_email:
             if is_ajax:
                 return jsonify({"success": False, "errors": {"email": "Email already registered"}}), 400
             flash('Email already registered')
@@ -718,18 +708,12 @@ def signup():
             flash('Error creating account. Please try again.')
             return render_template('signup.html')
         
-        # Create user document
-        user_data = {
-            'username': username,
-            'email': email,
-            'fullname': fullname if fullname else username,
-            'password_hash': password_hash,
-            'created_at': SERVER_TIMESTAMP,
-            'last_active': SERVER_TIMESTAMP
-        }
-        
-        # Save to Firestore
-        user_ref.set(user_data)
+        create_user(
+            username=username,
+            email=email,
+            fullname=fullname if fullname else username,
+            password_hash=password_hash,
+        )
         
         # Log success
         print(f"User created: {email} with username: {username}")
@@ -770,52 +754,40 @@ def detail():
     if not session.get('logged_in'):
         return redirect(url_for('landing'))
     try:
-        ae_scaler, ae_model, explainer = load_explanation_assets()
         flow_id = request.args.get('flow_id', default=-1, type=int)
-        flow = flow_df.loc[flow_df['FlowID'] == flow_id]
+        with flow_state_lock:
+            flow = flow_df.loc[flow_df['FlowID'] == flow_id].copy()
         
         if flow.empty:
             return "Flow not found", 404
             
-        X = [flow.values[0,1:40]]
-        choosen_instance = X
-        proba_score = list(predict_fn_rf(choosen_instance))
-        risk_proba = sum(proba_score[0][1:])
-        
-        if risk_proba > 0.8:
-            risk = "Risk: <p style=\"color:red;\">Very High</p>"
-        elif risk_proba > 0.6:
-            risk = "Risk: <p style=\"color:orangered;\">High</p>"
-        elif risk_proba > 0.4:
-            risk = "Risk: <p style=\"color:orange;\">Medium</p>"
-        elif risk_proba > 0.2:
-            risk = "Risk: <p style=\"color:green;\">Low</p>"
-        else:
-            risk = "Risk: <p style=\"color:limegreen;\">Minimal</p>"
-            
-        exp = explainer.explain_instance(choosen_instance[0], predict_fn_rf, num_features=6, top_labels=1)
-
-        X_transformed = ae_scaler.transform(X)
-        reconstruct = ae_model.predict(X_transformed)
-        err = reconstruct - X_transformed
-        abs_err = np.absolute(err)
-        
-        ind_n_abs_largest = np.argpartition(abs_err, -5)[-5:]
-        col_n_largest = ae_features[ind_n_abs_largest]
-        err_n_largest = err[0][ind_n_abs_largest]
-        
-        plot_div = plotly.offline.plot({
-            "data": [
-                plotly.graph_objs.Bar(x=col_n_largest[0].tolist(), y=err_n_largest[0].tolist())
-            ]
-        }, include_plotlyjs=False, output_type='div')
+        features = np.asarray(flow.iloc[0, 1:40], dtype=np.float64)
+        detection = detection_engine.detect(features)
+        risk = detection.risk_level.replace("_", " ").title()
+        exp = None
+        plot_div = None
+        explanation_error = None
+        try:
+            ae_scaler, ae_model, explainer = load_explanation_assets()
+            exp = explainer.explain_instance(features, predict_fn_rf, num_features=6, top_labels=1)
+            transformed = ae_scaler.transform([features])
+            reconstruction = ae_model.predict(transformed, verbose=0)
+            errors = np.abs(reconstruction[0] - transformed[0])
+            indices = np.argsort(errors)[-5:][::-1]
+            plot_div = plotly.offline.plot({
+                "data": [plotly.graph_objs.Bar(x=ae_features[indices].tolist(), y=errors[indices].tolist())]
+            }, include_plotlyjs=False, output_type='div')
+        except Exception as explanation_exception:  # Optional capability; core detail must still work.
+            logger.warning("Flow %s explanation unavailable: %s", flow_id, explanation_exception)
+            explanation_error = "Optional model explanation is unavailable for this flow."
 
         return render_template(
             'detail.html',
             tables=[flow.reset_index(drop=True).transpose().to_html(classes='data')],
-            exp=exp.as_html(),
+            exp=exp.as_html() if exp else None,
             ae_plot=plot_div,
-            risk=risk
+            risk=risk,
+            explanation_error=explanation_error,
         )
     except Exception as e:
         print(f"Error in flow_detail: {str(e)}")
@@ -973,6 +945,51 @@ def debug_mock_flow():
     return jsonify({
         "success": True,
         "message": "Simulated attack alert emitted",
+        "incident": incident.to_dict(),
+    })
+
+
+@app.post('/api/lab-alert')
+def authorized_lab_alert():
+    """Create a clearly labelled, token-protected alert for an authorized private lab."""
+    if not settings.debug_routes or not settings.lab_alert_token or not is_private_lab_request():
+        return jsonify({"error": "not_found"}), 404
+    supplied_token = request.headers.get("X-NetMask-Lab-Token", "")
+    if not hmac.compare_digest(supplied_token, settings.lab_alert_token):
+        return jsonify({"error": "lab_authorization_required"}), 401
+
+    source_ip = request.remote_addr or "unknown"
+    destination_ip = request.host.rsplit(":", 1)[0].strip("[]")
+    incident = incident_manager.record(
+        classification="Authorized Lab Alert",
+        source_ip=source_ip,
+        destination_ip=destination_ip,
+        protocol="HTTP",
+        risk_level="high",
+        attack_probability=1.0,
+        flow_id="authorized-lab",
+    )
+    runtime_metrics.increment("authorized_lab_alerts_total")
+    socketio.emit(
+        "newresult",
+        {
+            "result": [
+                "authorized-lab", source_ip, "", destination_ip, request.environ.get("SERVER_PORT", "5000"),
+                "HTTP", datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "", "authorized-lab-test", "",
+                "Authorized Lab Alert", 1.0, "High",
+            ],
+            "ips": [{"SourceIP": source_ip, "count": incident.event_count}],
+            "risk_level": "high",
+            "classification": "Authorized Lab Alert",
+            "simulated": True,
+            "incident": incident.to_dict(),
+        },
+        namespace="/test",
+    )
+    return jsonify({
+        "success": True,
+        "message": "Authorized lab alert emitted; no attack traffic was sent.",
+        "source_ip": source_ip,
         "incident": incident.to_dict(),
     })
 

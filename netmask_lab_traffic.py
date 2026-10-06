@@ -27,6 +27,7 @@ class Results:
     tcp_open: int = 0
     tcp_closed_or_filtered: int = 0
     pings_sent: int = 0
+    alerts_emitted: int = 0
     elapsed_seconds: float = 0.0
 
 def is_allowed_lab_address(address: str) -> bool:
@@ -105,8 +106,30 @@ def send_pings(address: str, count: int, results: Results) -> None:
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
 
+
+def send_authorized_lab_alert(address: str, port: int, token: str, results: Results) -> None:
+    """Request a labelled dashboard notification; this sends no attack payload."""
+    url = f"http://{host_for_url(address)}:{port}/api/lab-alert"
+    lab_request = request.Request(
+        url,
+        method="POST",
+        headers={"X-NetMask-Lab-Token": token, "X-NetMask-Lab-Run": results.run_id},
+    )
+    try:
+        with DIRECT_OPENER.open(lab_request, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        if response.status == 200 and payload.get("success"):
+            results.alerts_emitted = 1
+            print(f"Authorized lab alert accepted. Sensor recorded this tester as: {payload.get('source_ip')}")
+            return
+    except (error.URLError, TimeoutError, ConnectionError, OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"The sensor did not accept the authorized lab alert: {exc}") from exc
+    raise RuntimeError("The sensor did not accept the authorized lab alert. Check the token and sensor configuration.")
+
 def run_profile(args: argparse.Namespace, address: str, results: Results) -> None:
-    if args.mode == "baseline":
+    if args.mode == "alert":
+        send_authorized_lab_alert(address, args.port, args.lab_token, results)
+    elif args.mode == "baseline":
         send_http_requests(address, args.port, 20, (0.15, 0.30), results.run_id, results)
         send_tcp_connections(address, list(COMMON_TEST_PORTS[:8]) + [args.port], 1, 0.08, results)
         send_pings(address, 4, results)
@@ -127,7 +150,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate bounded, non-exploit traffic against an authorized NetMask Sentinel host on a private network.")
     parser.add_argument("--target", required=True, help="Private IP or private hostname")
     parser.add_argument("--port", type=int, default=5000, help="NetMask web port")
-    parser.add_argument("--mode", choices=("baseline", "burst", "discovery"), default="baseline")
+    parser.add_argument("--mode", choices=("alert", "baseline", "burst", "discovery"), default="baseline")
+    parser.add_argument("--lab-token", help="Token displayed by the NetMask sensor for an authorized alert test")
     parser.add_argument(AUTHORIZED_FLAG, action="store_true", dest="authorized_lab_use", help="Confirm you own or are authorized to test the target")
     return parser.parse_args()
 
@@ -138,6 +162,9 @@ def main() -> int:
         return 2
     if not 1 <= args.port <= 65535:
         print("Refused: port must be between 1 and 65535.", file=sys.stderr)
+        return 2
+    if args.mode == "alert" and not args.lab_token:
+        print("Refused: --lab-token is required for alert mode.", file=sys.stderr)
         return 2
     try:
         addresses = resolve_private_target(args.target)

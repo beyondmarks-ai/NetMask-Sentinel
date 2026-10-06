@@ -5,6 +5,7 @@ auth is disabled but the app still starts (static routes work; login needs Fireb
 from __future__ import annotations
 
 import os
+import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +19,7 @@ _root = Path(__file__).resolve().parent
 _credential_path = Path(os.environ.get("FIREBASE_CREDENTIALS", str(_root / "firebase-adminsdk.json")))
 
 firestore_db = None
+_local_auth_path = _root / "runtime" / "accounts.sqlite3"
 
 try:
     if not firebase_admin._apps:
@@ -45,19 +47,74 @@ def verify_password(stored_hash: str | None, password: str) -> bool:
     return check_password_hash(stored_hash, password)
 
 
-def get_user_by_username(username: str):
-    if not firestore_db or not username:
+def _local_connection() -> sqlite3.Connection:
+    """Open the local development account store when Firebase is not configured."""
+    _local_auth_path.parent.mkdir(exist_ok=True)
+    connection = sqlite3.connect(_local_auth_path)
+    connection.row_factory = sqlite3.Row
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS users (
+        email TEXT PRIMARY KEY COLLATE NOCASE,
+        username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        fullname TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL
+        )"""
+    )
+    return connection
+
+
+def get_user_by_email(email: str):
+    if not email:
         return None, None
     try:
-        snap = list(
-            firestore_db.collection("users").where("username", "==", username).limit(1).stream()
-        )
-        if not snap:
-            return None, None
-        doc = snap[0]
-        return doc.to_dict(), doc.id
+        if firestore_db:
+            document = firestore_db.collection("users").document(email).get()
+            return (document.to_dict(), document.id) if document.exists else (None, None)
+        with _local_connection() as connection:
+            row = connection.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        return (dict(row), row["email"]) if row else (None, None)
     except Exception:  # noqa: BLE001
         return None, None
+
+
+def get_user_by_username(username: str):
+    if not username:
+        return None, None
+    try:
+        if firestore_db:
+            snap = list(
+                firestore_db.collection("users").where("username", "==", username).limit(1).stream()
+            )
+            if not snap:
+                return None, None
+            doc = snap[0]
+            return doc.to_dict(), doc.id
+        with _local_connection() as connection:
+            row = connection.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+        return (dict(row), row["email"]) if row else (None, None)
+    except Exception:  # noqa: BLE001
+        return None, None
+
+
+def create_user(*, username: str, email: str, fullname: str, password_hash: str) -> str:
+    """Create an account in Firestore when available, otherwise in local SQLite."""
+    if firestore_db:
+        firestore_db.collection("users").document(email).set({
+            "username": username,
+            "email": email,
+            "fullname": fullname,
+            "password_hash": password_hash,
+            "created_at": SERVER_TIMESTAMP,
+            "last_active": SERVER_TIMESTAMP,
+        })
+        return email
+    with _local_connection() as connection:
+        connection.execute(
+            "INSERT INTO users (email, username, fullname, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
+            (email, username, fullname, password_hash, datetime.now(timezone.utc).isoformat()),
+        )
+    return email
 
 
 def create_user_session(user_id, device_info=None):
