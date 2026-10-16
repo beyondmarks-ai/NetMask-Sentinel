@@ -59,6 +59,12 @@ if ($LASTEXITCODE -ne 0) { throw "Azure Container App deployment failed." }
 
 $fqdn = az containerapp show --name $appName --resource-group $resourceGroup --query properties.configuration.ingress.fqdn -o tsv
 $cloudUrl = "https://$fqdn"
+az containerapp update `
+    --name $appName `
+    --resource-group $resourceGroup `
+    --set-env-vars "CORS_ORIGINS=$cloudUrl" `
+    --output none
+if ($LASTEXITCODE -ne 0) { throw "Could not configure the hosted dashboard origin." }
 $runtimeDir = Join-Path $PSScriptRoot "runtime"
 New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
 @{
