@@ -3,6 +3,7 @@ from pathlib import Path
 from threading import Lock
 import atexit
 import csv
+import hashlib
 import json
 import logging
 import os
@@ -39,6 +40,7 @@ from netmask.sensor import CaptureService
 from netmask.telemetry import RuntimeMetrics
 
 settings = Settings.from_env()
+asset_version = hashlib.sha256(Path("static/js/application.js").read_bytes()).hexdigest()[:12]
 
 
 def is_local_request():
@@ -90,6 +92,7 @@ def inject_security_context():
     return {
         "csrf_token": session.get("csrf_token", ""),
         "guest_access_enabled": settings.guest_access,
+        "asset_version": asset_version,
     }
 
 CORS(app, origins=list(settings.cors_origins), supports_credentials=True)

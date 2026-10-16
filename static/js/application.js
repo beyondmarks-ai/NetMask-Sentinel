@@ -21,7 +21,16 @@ $(document).ready(function () {
     }
 
     // Initialize Socket.IO connection
-    socket = io.connect('http://' + document.domain + ':' + location.port + '/test');
+    socket = io('/test', {
+        transports: ['websocket', 'polling'],
+        upgrade: true,
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
+        timeout: 10000
+    });
+    let socketHasConnected = false;
+    let connectionErrorShown = false;
     var ctx = document.getElementById("myChart").getContext('2d');
     var itemsPerPage = 10;
     const originalDocumentTitle = document.title;
@@ -637,15 +646,18 @@ $(document).on('click', '#logout-button', function(e) {
     // Handle Socket.IO connection errors
     socket.on('connect_error', function (error) {
         console.error('Socket.IO connection error:', error);
-        toastr.error("Connection lost. Attempting to reconnect...");
-        setTimeout(function() {
-            socket.connect();
-        }, 3000);
+        if (!connectionErrorShown) {
+            connectionErrorShown = true;
+            toastr.error("Real-time connection unavailable. Reconnecting...");
+        }
     });
 
-    // Handle reconnection
-    socket.on('reconnect', function() {
-        toastr.success("Connection reestablished", "Success");
+    socket.on('connect', function() {
+        if (socketHasConnected) {
+            toastr.success("Real-time connection restored", "Connected");
+        }
+        socketHasConnected = true;
+        connectionErrorShown = false;
     });
 
     // Notification badge update

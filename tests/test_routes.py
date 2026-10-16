@@ -100,6 +100,16 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json()["errors"]["password"], "Password must be at least 12 characters")
 
+    def test_dashboard_socket_uses_secure_same_origin_url(self):
+        script = application.app.static_folder + "/js/application.js"
+        with open(script, "r", encoding="utf-8") as source:
+            javascript = source.read()
+        self.assertIn("socket = io('/test'", javascript)
+        self.assertNotIn("io.connect('http://'", javascript)
+        self.authenticate()
+        dashboard = self.client.get("/capture")
+        self.assertIn(f"application.js?v={application.asset_version}".encode(), dashboard.data)
+
     def test_detail_keeps_network_fields_when_explanation_is_unavailable(self):
         self.authenticate()
         original_flows = application.flow_df
