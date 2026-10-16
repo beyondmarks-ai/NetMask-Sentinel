@@ -38,6 +38,7 @@ class Settings:
     incident_window_seconds: int
     cors_origins: tuple[str, ...]
     lab_alert_token: str
+    sensor_ingest_token: str
 
     @property
     def production(self) -> bool:
@@ -66,9 +67,12 @@ class Settings:
             incident_window_seconds=_int("INCIDENT_WINDOW_SECONDS", 120),
             cors_origins=_origins(os.environ.get("CORS_ORIGINS")),
             lab_alert_token=os.environ.get("NETMASK_LAB_ALERT_TOKEN", ""),
+            sensor_ingest_token=os.environ.get("NETMASK_SENSOR_INGEST_TOKEN", ""),
         )
         if settings.flow_timeout_seconds <= 0 or settings.incident_window_seconds <= 0:
             raise RuntimeError("Timeout settings must be positive")
         if production and (settings.guest_access or settings.debug_routes):
             raise RuntimeError("Guest access and debug routes must be disabled in production")
+        if production and settings.sensor_ingest_token and len(settings.sensor_ingest_token) < 32:
+            raise RuntimeError("NETMASK_SENSOR_INGEST_TOKEN must contain at least 32 characters")
         return settings

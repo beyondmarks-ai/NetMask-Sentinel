@@ -21,6 +21,9 @@ from firebase_admin.firestore import SERVER_TIMESTAMP
 from flask import Flask, flash, has_request_context, jsonify, redirect, render_template, request, session, url_for
 from flask_cors import CORS
 from flask_socketio import SocketIO
+from werkzeug.middleware.proxy_fix import ProxyFix
+
+import azure_store
 
 from firebase_config import (
     firestore_db, create_user_session, update_global_stats,
@@ -28,6 +31,7 @@ from firebase_config import (
     save_malicious_flow, increment_high_risk_count,
 )
 from netmask.config import Settings
+from netmask.cloud_reporting import CloudReporter
 from netmask.detection import DetectionEngine
 from netmask.features import FEATURE_NAMES, split_flow_record
 from netmask.incidents import IncidentManager
@@ -52,6 +56,8 @@ def is_private_lab_request() -> bool:
     except ValueError:
         return False
 app = Flask(__name__)
+if settings.production:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.config.update(
     SECRET_KEY=settings.secret_key,
     DEBUG=settings.debug,
@@ -70,6 +76,8 @@ def protect_state_changes():
         return None
     if request.endpoint == "authorized_lab_alert" and settings.debug_routes:
         return None
+    if request.endpoint == "ingest_sensor_event":
+        return None
     supplied = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token")
     expected = session.get("csrf_token", "")
     if not supplied or not hmac.compare_digest(str(supplied), str(expected)):
@@ -79,7 +87,10 @@ def protect_state_changes():
 
 @app.context_processor
 def inject_security_context():
-    return {"csrf_token": session.get("csrf_token", "")}
+    return {
+        "csrf_token": session.get("csrf_token", ""),
+        "guest_access_enabled": settings.guest_access,
+    }
 
 CORS(app, origins=list(settings.cors_origins), supports_credentials=True)
 
@@ -236,6 +247,7 @@ def load_explanation_assets():
 
 runtime_metrics = RuntimeMetrics()
 incident_manager = IncidentManager(window_seconds=settings.incident_window_seconds)
+cloud_reporter = CloudReporter()
 def _append_runtime_csv(path: Path, fieldnames: list[str], row: dict[str, object]) -> None:
     """Append structured runtime evidence without modifying tracked fixture files."""
     with flow_state_lock:
@@ -328,6 +340,9 @@ def classify(record):
                 attack_probability=detection.attack_probability,
                 flow_id=assigned_flow_id,
             )
+            incident_payload = incident.to_dict()
+            azure_store.save_incident({**incident_payload, "sensor_id": cloud_reporter.sensor_id})
+            cloud_reporter.report(incident_payload, detection.to_dict())
 
         if firestore_db:
             user_id = session.get("user_id", "sensor") if has_request_context() else "sensor"
@@ -469,20 +484,109 @@ def api_incidents():
     if not session.get('logged_in'):
         return jsonify({"error": "authentication_required"}), 401
     limit = min(max(request.args.get('limit', 100, type=int), 1), 500)
-    return jsonify({
-        "items": incident_manager.list(limit=limit, status=request.args.get('status')),
-        "summary": incident_manager.summary(),
-    })
+    if azure_store.configured():
+        items = azure_store.list_incidents(limit=limit)
+        requested_status = request.args.get('status')
+        if requested_status:
+            items = [item for item in items if item.get("status") == requested_status]
+        summary = {
+            "total": len(items),
+            "new": sum(item.get("status") == "new" for item in items),
+            "acknowledged": sum(item.get("status") == "acknowledged" for item in items),
+            "high_or_above": sum(item.get("risk_level") in {"high", "very_high"} for item in items),
+        }
+        return jsonify({"items": items, "summary": summary})
+    return jsonify({"items": incident_manager.list(limit=limit, status=request.args.get('status')), "summary": incident_manager.summary()})
 
 
 @app.post('/api/incidents/<incident_id>/acknowledge')
 def acknowledge_incident(incident_id):
     if not session.get('logged_in'):
         return jsonify({"error": "authentication_required"}), 401
-    incident = incident_manager.acknowledge(incident_id)
+    incident = azure_store.acknowledge_incident(incident_id) if azure_store.configured() else incident_manager.acknowledge(incident_id)
     if not incident:
         return jsonify({"error": "incident_not_found"}), 404
     return jsonify({"success": True, "incident": incident})
+
+
+def _find_incident(incident_id: str):
+    if azure_store.configured():
+        return azure_store.get_incident(incident_id)
+    return next((item for item in incident_manager.list(limit=500) if item["incident_id"] == incident_id), None)
+
+
+@app.post('/api/incidents/<incident_id>/share')
+def share_incident(incident_id):
+    if not session.get('logged_in'):
+        return jsonify({"error": "authentication_required"}), 401
+    incident = _find_incident(incident_id)
+    if not incident:
+        return jsonify({"error": "incident_not_found"}), 404
+    try:
+        expires_hours = min(max(request.args.get("hours", 168, type=int), 1), 720)
+        token, expires_at = azure_store.create_share(incident, expires_hours=expires_hours)
+    except RuntimeError as exc:
+        return jsonify({"error": "sharing_unavailable", "message": str(exc)}), 503
+    return jsonify({
+        "success": True,
+        "url": url_for("shared_incident", token=token, _external=True),
+        "expires_at": expires_at,
+    })
+
+
+@app.get('/share/<token>')
+def shared_incident(token):
+    incident = azure_store.resolve_share(token)
+    if not incident:
+        return render_template("shared_incident.html", incident=None), 404
+    return render_template("shared_incident.html", incident=incident)
+
+
+@app.post('/api/sensor/events')
+def ingest_sensor_event():
+    expected = settings.sensor_ingest_token
+    supplied = request.headers.get("Authorization", "")
+    if not expected or not hmac.compare_digest(supplied, f"Bearer {expected}"):
+        return jsonify({"error": "sensor_authentication_required"}), 401
+    payload = request.get_json(silent=True) or {}
+    try:
+        source_ip = str(ipaddress.ip_address(str(payload["source_ip"])))
+        destination_ip = str(ipaddress.ip_address(str(payload["destination_ip"])))
+        classification = str(payload.get("classification", "Unknown"))[:128]
+        protocol = str(payload.get("protocol", "unknown"))[:20]
+        risk_level = str(payload.get("risk_level", "unknown")).lower()
+        if risk_level not in {"minimal", "low", "medium", "high", "very_high"}:
+            raise ValueError("invalid risk")
+        probability = min(max(float(payload.get("max_attack_probability", 0.0)), 0.0), 1.0)
+        sensor_id = str(payload.get("sensor_id", "unknown-sensor"))[:128]
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "invalid_sensor_event"}), 400
+
+    incident = incident_manager.record(
+        classification=classification,
+        source_ip=source_ip,
+        destination_ip=destination_ip,
+        protocol=protocol,
+        risk_level=risk_level,
+        attack_probability=probability,
+        flow_id=str(payload.get("latest_flow_id", "remote"))[:128],
+    )
+    incident_payload = {**incident.to_dict(), "sensor_id": sensor_id}
+    azure_store.save_incident(incident_payload)
+    runtime_metrics.increment("cloud_sensor_events_total")
+    row = [
+        "remote", source_ip, "", destination_ip, "", protocol,
+        incident_payload["first_seen"], incident_payload["last_seen"], sensor_id, "",
+        classification, probability, risk_level.replace("_", " ").title(),
+    ]
+    socketio.emit("newresult", {
+        "result": row,
+        "ips": [{"SourceIP": source_ip, "count": incident.event_count}],
+        "risk_level": risk_level,
+        "classification": classification,
+        "incident": incident_payload,
+    }, namespace="/test")
+    return jsonify({"accepted": True, "incident_id": incident.incident_id}), 202
 
 
 # Route for the landing page (default page)
@@ -969,6 +1073,12 @@ def authorized_lab_alert():
         attack_probability=1.0,
         flow_id="authorized-lab",
     )
+    cloud_reporter.report(incident.to_dict(), {
+        "classification": "Authorized Lab Alert",
+        "attack_probability": 1.0,
+        "risk_level": "high",
+        "simulated": True,
+    })
     runtime_metrics.increment("authorized_lab_alerts_total")
     socketio.emit(
         "newresult",
@@ -1018,6 +1128,7 @@ def cleanup_on_shutdown():
             capture_service.stop(flush=True)
     except Exception:
         logger.exception("Capture service shutdown failed")
+    cloud_reporter.close()
 
 
 atexit.register(cleanup_on_shutdown)

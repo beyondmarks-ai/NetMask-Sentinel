@@ -455,11 +455,12 @@ if (auth) {
             const acknowledge = status === "new"
                 ? `<button type="button" class="btn btn-default btn-sm acknowledge-incident" data-incident-id="${escapedFlowValue(incident.incident_id)}">Acknowledge</button>`
                 : '<span class="incident-meta">Acknowledged</span>';
+            const share = `<button type="button" class="btn btn-primary btn-sm share-incident" data-incident-id="${escapedFlowValue(incident.incident_id)}">Share</button>`;
             return `<article class="incident-item" data-risk="${escapedFlowValue(risk)}" data-status="${escapedFlowValue(status)}">
                 <div><div class="incident-id">${escapedFlowValue(incident.incident_id)}</div><div class="incident-meta">${escapedFlowValue(risk.replaceAll("_", " "))}</div></div>
                 <div><strong>${escapedFlowValue(incident.classification)}</strong><div class="incident-meta">${escapedFlowValue(route)} · ${escapedFlowValue(incident.protocol)}</div></div>
                 <span>${escapedFlowValue(incident.event_count || 1)} event(s)</span>
-                ${acknowledge}
+                <div>${acknowledge} ${share}</div>
             </article>`;
         }).join("");
     }
@@ -483,6 +484,26 @@ if (auth) {
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             refreshIncidents();
         }).catch(() => toastr.error("Could not acknowledge the incident."));
+    });
+
+    $(document).on('click', '.share-incident', function () {
+        const incidentId = $(this).data('incident-id');
+        fetch(`/api/incidents/${encodeURIComponent(incidentId)}/share`, {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
+            }
+        }).then(async (response) => {
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.message || `HTTP ${response.status}`);
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(payload.url);
+                toastr.success("Expiring report link copied to clipboard.");
+            } else {
+                window.prompt("Copy this expiring report link:", payload.url);
+            }
+        }).catch((error) => toastr.error(`Could not create report link: ${error.message}`));
     });
 
     // Update table with pagination

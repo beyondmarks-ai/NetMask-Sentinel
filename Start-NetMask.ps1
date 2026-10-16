@@ -13,6 +13,7 @@ $StdoutLog = Join-Path $RuntimeDir "server.stdout.log"
 $StderrLog = Join-Path $RuntimeDir "server.stderr.log"
 $PidFile = Join-Path $RuntimeDir "netmask.pid"
 $LabTokenFile = Join-Path $RuntimeDir "lab-alert.token"
+$CloudSensorConfig = Join-Path $RuntimeDir "cloud-sensor.json"
 $HealthUrl = "http://127.0.0.1:5000/health/ready"
 $DashboardUrl = "http://127.0.0.1:5000/guest"
 
@@ -111,6 +112,12 @@ if ([string]::IsNullOrWhiteSpace($env:NETMASK_LAB_ALERT_TOKEN)) {
         $env:NETMASK_LAB_ALERT_TOKEN = [Convert]::ToBase64String($bytes)
         Set-Content -LiteralPath $LabTokenFile -Value $env:NETMASK_LAB_ALERT_TOKEN -NoNewline
     }
+}
+if (Test-Path -LiteralPath $CloudSensorConfig) {
+    $cloudConfig = Get-Content -Raw -LiteralPath $CloudSensorConfig | ConvertFrom-Json
+    $env:NETMASK_CLOUD_URL = [string]$cloudConfig.cloud_url
+    $env:NETMASK_SENSOR_INGEST_TOKEN = [string]$cloudConfig.sensor_token
+    $env:NETMASK_SENSOR_ID = [string]$cloudConfig.sensor_id
 }
 
 Remove-Item -LiteralPath $StdoutLog, $StderrLog -Force -ErrorAction SilentlyContinue

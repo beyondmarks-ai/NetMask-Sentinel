@@ -207,6 +207,55 @@ NetMask works locally without Firebase. To enable cloud authentication and histo
 
 Never commit service-account JSON, API secrets, access tokens, packet captures containing personal data, or production logs.
 
+## Azure hosted dashboard and share links
+
+The hosted architecture does not use Microsoft Entra External ID. NetMask keeps
+its own signup/sign-in flow, hashes passwords with scrypt, and stores account
+records in private Azure Table Storage. Sensor computers send signed incident
+events to Azure over outbound HTTPS. Viewer computers need only a browser.
+
+Prerequisites:
+
+- an active Azure subscription and Azure CLI login (`az login`);
+- permission to create a resource group, Storage account, Container Registry,
+  Log Analytics workspace, and Container Apps environment;
+- sufficient Azure credit for one continuously running container replica.
+
+Deploy from PowerShell:
+
+```powershell
+.\Deploy-Azure.ps1
+```
+
+The default region is `centralindia`. The script builds the container in Azure,
+creates an HTTPS dashboard, generates high-entropy application and sensor
+secrets, and configures the current sensor. Deployment metadata is saved under
+ignored `runtime/`; secrets are never committed.
+
+On each additional sensor PC, copy the hosted URL and sensor token from the
+administrator's ignored `runtime/azure-deployment.json`, then run:
+
+```powershell
+.\Configure-AzureSensor.ps1 `
+  -CloudUrl "https://your-app.azurecontainerapps.io" `
+  -SensorToken "your-generated-sensor-token" `
+  -SensorId "branch-office-1"
+```
+
+Restart NetMask afterward. Detected incidents appear on the hosted dashboard
+with the packet's observed source and destination IPs. A signed-in user can
+press **Share** to create an unguessable report URL that expires after seven
+days. The public report is a read-only snapshot and clearly labels the address
+as an observed source IP; NAT, VPNs, proxies, and spoofing can obscure the true
+origin.
+
+To remove the Azure deployment and stop its charges:
+
+```powershell
+$deployment = Get-Content -Raw runtime\azure-deployment.json | ConvertFrom-Json
+az group delete --name $deployment.resource_group --yes
+```
+
 ## Test on the same computer
 
 Start NetMask, then double-click `Run Remote Lab Test.cmd` and use:

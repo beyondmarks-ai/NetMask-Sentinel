@@ -1,0 +1,15 @@
+.git
+.github
+.venv
+__pycache__
+*.pyc
+runtime
+reports
+build
+dist
+SS
+*.docx
+*.pcap
+*.pcapng
+firebase-adminsdk*.json
+.matplotlib-cache

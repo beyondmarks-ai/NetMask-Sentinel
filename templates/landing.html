@@ -62,7 +62,9 @@
               <div class="hero-actions">
                 <button type="button" id="heroLoginBtn" class="btn btn-lg btn-primary">Login</button>
                 <button type="button" id="heroSignupBtn" class="btn btn-lg btn-default hero-secondary-btn">Signup</button>
+                {% if guest_access_enabled %}
                 <a href="{{ url_for('guest_access') }}" class="btn btn-lg btn-default hero-secondary-btn">Skip - View Dashboard</a>
+                {% endif %}
               </div>
             {% endif %}
           </div>

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shared Incident | NetMask Sentinel</title>
+  <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/main.css') }}" rel="stylesheet">
+</head>
+<body>
+  <main class="container" style="max-width: 920px; padding-top: 40px;">
+    <h1>NetMask Sentinel Incident Report</h1>
+    {% if not incident %}
+      <div class="alert alert-warning">This report link is invalid or has expired.</div>
+    {% else %}
+      <div class="alert alert-info">Observed network evidence — an IP address does not by itself prove attacker identity.</div>
+      <table class="table table-bordered table-striped">
+        <tbody>
+          <tr><th>Incident ID</th><td>{{ incident.incident_id }}</td></tr>
+          <tr><th>Classification</th><td>{{ incident.classification }}</td></tr>
+          <tr><th>Observed source IP</th><td><strong>{{ incident.source_ip }}</strong></td></tr>
+          <tr><th>Destination IP</th><td>{{ incident.destination_ip }}</td></tr>
+          <tr><th>Protocol</th><td>{{ incident.protocol }}</td></tr>
+          <tr><th>Risk</th><td>{{ incident.risk_level|replace('_', ' ')|title }}</td></tr>
+          <tr><th>Maximum attack probability</th><td>{{ '%.2f'|format(incident.max_attack_probability|float) }}</td></tr>
+          <tr><th>First seen</th><td>{{ incident.first_seen }}</td></tr>
+          <tr><th>Last seen</th><td>{{ incident.last_seen }}</td></tr>
+          <tr><th>Events</th><td>{{ incident.event_count }}</td></tr>
+          <tr><th>Sensor</th><td>{{ incident.sensor_id or 'unknown' }}</td></tr>
+          <tr><th>Link expires</th><td>{{ incident.share_expires_at or 'Not available' }}</td></tr>
+        </tbody>
+      </table>
+    {% endif %}
+  </main>
+</body>
+</html>

@@ -15,6 +15,8 @@ from firebase_admin import credentials, firestore
 from firebase_admin.firestore import SERVER_TIMESTAMP
 from werkzeug.security import check_password_hash, generate_password_hash
 
+import azure_store
+
 _root = Path(__file__).resolve().parent
 _credential_path = Path(os.environ.get("FIREBASE_CREDENTIALS", str(_root / "firebase-adminsdk.json")))
 
@@ -68,6 +70,8 @@ def get_user_by_email(email: str):
     if not email:
         return None, None
     try:
+        if azure_store.configured():
+            return azure_store.get_user_by_email(email)
         if firestore_db:
             document = firestore_db.collection("users").document(email).get()
             return (document.to_dict(), document.id) if document.exists else (None, None)
@@ -82,6 +86,8 @@ def get_user_by_username(username: str):
     if not username:
         return None, None
     try:
+        if azure_store.configured():
+            return azure_store.get_user_by_username(username)
         if firestore_db:
             snap = list(
                 firestore_db.collection("users").where("username", "==", username).limit(1).stream()
@@ -99,6 +105,13 @@ def get_user_by_username(username: str):
 
 def create_user(*, username: str, email: str, fullname: str, password_hash: str) -> str:
     """Create an account in Firestore when available, otherwise in local SQLite."""
+    if azure_store.configured():
+        return azure_store.create_user(
+            username=username,
+            email=email,
+            fullname=fullname,
+            password_hash=password_hash,
+        )
     if firestore_db:
         firestore_db.collection("users").document(email).set({
             "username": username,

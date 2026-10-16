@@ -111,6 +111,57 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(payload["source_ip"], "192.168.50.12")
         self.assertEqual(payload["incident"]["classification"], "Authorized Lab Alert")
 
+    def test_cloud_sensor_ingestion_requires_token_and_preserves_observed_ips(self):
+        event = {
+            "source_ip": "203.0.113.44",
+            "destination_ip": "10.0.0.12",
+            "classification": "Probe",
+            "protocol": "TCP",
+            "risk_level": "high",
+            "max_attack_probability": 0.91,
+            "sensor_id": "branch-office-1",
+            "latest_flow_id": "42",
+        }
+        hosted_settings = replace(application.settings, sensor_ingest_token="x" * 48)
+        with patch.object(application, "settings", hosted_settings), patch("application.azure_store.save_incident") as save:
+            denied = self.client.post("/api/sensor/events", json=event)
+            accepted = self.client.post(
+                "/api/sensor/events",
+                json=event,
+                headers={"Authorization": f"Bearer {'x' * 48}"},
+            )
+        self.assertEqual(denied.status_code, 401)
+        self.assertEqual(accepted.status_code, 202)
+        saved = save.call_args.args[0]
+        self.assertEqual(saved["source_ip"], "203.0.113.44")
+        self.assertEqual(saved["destination_ip"], "10.0.0.12")
+        self.assertEqual(saved["sensor_id"], "branch-office-1")
+
+    def test_authenticated_user_can_create_expiring_share_link(self):
+        self.authenticate()
+        incident = application.incident_manager.record(
+            classification="Probe", source_ip="198.51.100.9", destination_ip="10.0.0.4",
+            protocol="TCP", risk_level="high", attack_probability=0.88, flow_id="share-test"
+        )
+        route = f"/api/incidents/{incident.incident_id}/share"
+        with patch("application.azure_store.create_share", return_value=("secret-share-token", "2030-01-01T00:00:00+00:00")):
+            response = self.client.post(route, headers={"X-CSRF-Token": "test-token"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("/share/secret-share-token", response.get_json()["url"])
+
+    def test_public_share_page_displays_observed_source_ip(self):
+        report = {
+            "incident_id": "INC-1", "classification": "Probe", "source_ip": "198.51.100.9",
+            "destination_ip": "10.0.0.4", "protocol": "TCP", "risk_level": "high",
+            "max_attack_probability": 0.88, "first_seen": "now", "last_seen": "now",
+            "event_count": 1, "sensor_id": "sensor-a",
+        }
+        with patch("application.azure_store.resolve_share", return_value=report):
+            response = self.client.get("/share/test-token")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"198.51.100.9", response.data)
+        self.assertIn(b"Observed source IP", response.data)
+
 
 if __name__ == "__main__":
     unittest.main()
