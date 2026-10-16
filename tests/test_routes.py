@@ -100,6 +100,13 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.get_json()["errors"]["password"], "Password must be at least 12 characters")
 
+    def test_login_browser_script_submits_csrf_token(self):
+        page = self.client.get("/")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b'name="csrf_token"', page.data)
+        self.assertIn(b"data: $form.serialize()", page.data)
+        self.assertNotIn(b"data: formData,", page.data)
+
     def test_dashboard_socket_uses_secure_same_origin_url(self):
         script = application.app.static_folder + "/js/application.js"
         with open(script, "r", encoding="utf-8") as source:

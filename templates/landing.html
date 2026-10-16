@@ -193,15 +193,14 @@ $('#authForm').on('submit', function(e) {
         return;
     }
 
-    // AJAX request with improved error handling
+    // Submit the complete form so the hidden CSRF token reaches the server.
     $.ajax({
         type: 'POST',
         url: $form.attr('action'),
-        data: formData,
+        data: $form.serialize(),
         dataType: 'json',
         headers: {
             'X-Requested-With': 'XMLHttpRequest',
-            'Content-Type': 'application/x-www-form-urlencoded',
             'Accept': 'application/json'
         },
         success: function(response) {
