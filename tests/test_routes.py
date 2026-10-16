@@ -81,6 +81,25 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(login.status_code, 200)
         self.assertTrue(login.get_json()["success"])
 
+    def test_signup_explains_password_requirement(self):
+        page = self.client.get("/")
+        self.assertIn(b'minlength="12"', page.data)
+        with self.client.session_transaction() as browser_session:
+            csrf_token = browser_session["csrf_token"]
+        response = self.client.post(
+            "/signup",
+            data={
+                "csrf_token": csrf_token,
+                "username": "short_password_user",
+                "email": "short-password@example.test",
+                "fullname": "Short Password",
+                "password": "short",
+            },
+            headers={"X-Requested-With": "XMLHttpRequest"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.get_json()["errors"]["password"], "Password must be at least 12 characters")
+
     def test_detail_keeps_network_fields_when_explanation_is_unavailable(self):
         self.authenticate()
         original_flows = application.flow_df

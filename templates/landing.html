@@ -107,18 +107,22 @@
         <div class="input-group">
           <span class="input-group-text"><i class="fas fa-id-badge"></i></span>
           <input type="text" class="form-control" name="fullname" placeholder="Full name" required>
+          <small class="text-danger signup-field-error" data-error-for="fullname"></small>
         </div>
         <div class="input-group">
           <span class="input-group-text"><i class="fas fa-envelope"></i></span>
           <input type="email" class="form-control" name="email" placeholder="Email" required>
+          <small class="text-danger signup-field-error" data-error-for="email"></small>
         </div>
         <div class="input-group">
           <span class="input-group-text"><i class="fas fa-user"></i></span>
           <input type="text" class="form-control" name="username" placeholder="Username" required>
+          <small class="text-danger signup-field-error" data-error-for="username"></small>
         </div>
         <div class="input-group">
           <span class="input-group-text"><i class="fas fa-lock"></i></span>
-          <input type="password" class="form-control" name="password" placeholder="Password" required>
+          <input type="password" class="form-control" name="password" placeholder="Password (minimum 12 characters)" minlength="12" required>
+          <small class="text-danger signup-field-error" data-error-for="password"></small>
         </div>
         <button type="submit" class="btn btn-lg btn-primary w-100">Signup</button>
       </form>
@@ -246,6 +250,19 @@ $('#authForm').on('submit', function(e) {
     $('#signupFormModal').on('submit', function(e) {
         e.preventDefault();
         const $form = $(this);
+        $form.find('.signup-field-error').text('');
+
+        function showSignupError(response) {
+            if (response && response.errors) {
+                Object.entries(response.errors).forEach(function([field, message]) {
+                    $form.find(`[data-error-for="${field}"]`).text(message);
+                });
+                alert(Object.values(response.errors).join('\n'));
+                return;
+            }
+            alert(response?.message || 'Signup failed. Please try again.');
+        }
+
         $.ajax({
             type: 'POST',
             url: $form.attr('action'),
@@ -258,12 +275,11 @@ $('#authForm').on('submit', function(e) {
                 if (response.success) {
                     window.location.href = response.redirect || "/capture";
                 } else {
-                    alert(response.message || 'Signup failed. Please try again.');
+                    showSignupError(response);
                 }
             },
             error: function(xhr) {
-                const msg = xhr.responseJSON?.message || 'Signup failed. Please try again.';
-                alert(msg);
+                showSignupError(xhr.responseJSON);
             }
         });
     });
