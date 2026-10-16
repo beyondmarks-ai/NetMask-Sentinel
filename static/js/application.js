@@ -556,6 +556,9 @@ if (auth) {
     }
 
     refreshIncidents();
+    // Reconcile with persisted incidents even if a socket event was missed
+    // during page load, reconnect, or an Azure revision rollout.
+    setInterval(refreshIncidents, 5000);
 
     // Update filtered count function
     function updateFilteredCount() {

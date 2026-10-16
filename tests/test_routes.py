@@ -106,6 +106,7 @@ class RouteTests(unittest.TestCase):
             javascript = source.read()
         self.assertIn("socket = io('/test'", javascript)
         self.assertNotIn("io.connect('http://'", javascript)
+        self.assertIn("setInterval(refreshIncidents, 5000)", javascript)
         self.authenticate()
         dashboard = self.client.get("/capture")
         self.assertIn(f"application.js?v={application.asset_version}".encode(), dashboard.data)
