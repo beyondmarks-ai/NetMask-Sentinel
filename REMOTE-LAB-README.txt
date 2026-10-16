@@ -17,10 +17,14 @@ Steps
 -----
 1. On the NetMask computer, double-click "NetMask Sentinel.lnk".
 2. Run ipconfig and note its private IPv4 address.
-3. Copy and extract the complete ZIP on the second computer.
-4. Double-click "Run Remote Lab Test.cmd".
-5. Enter the private IP, choose a profile, and type AUTHORIZED.
-6. Watch Captured Flow and Recent Incidents on the NetMask dashboard.
+3. For the guaranteed alert, copy only "Test NetMask Alert.cmd" to the second
+   Windows computer and double-click it. No Python installation is required.
+4. Enter the private IP, paste the token shown by Show-LabAlertToken.ps1 on the
+   sensor PC, and type AUTHORIZED.
+5. Watch Recent Incidents on the local and online NetMask dashboards.
+
+For the additional traffic profiles, extract the complete remote-test ZIP and
+double-click "Run Remote Lab Test.cmd".
 
 Profiles
 --------

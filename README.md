@@ -122,8 +122,13 @@ For a notification demonstration without sending an attack payload:
 
 1. Start NetMask on the sensor computer.
 2. Run `Show-LabAlertToken.ps1` on that computer and copy its token.
-3. On the second private-network computer, use `Run Remote Lab Test.cmd`, pick
-   **alert**, type `AUTHORIZED`, then enter the token.
+3. Copy only `Test NetMask Alert.cmd` to the second Windows computer and
+   double-click it. Enter the sensor computer's private IPv4 address, paste the
+   token, and type `AUTHORIZED`.
+
+The one-file tester uses Windows PowerShell and needs no Python installation or
+other project files. `Run Remote Lab Test.cmd` remains available for the
+additional baseline, burst, and discovery traffic profiles.
 
 The dashboard records the second computer's source IP as an **Authorized Lab
 Alert** and displays the normal high-risk notification. This endpoint accepts
