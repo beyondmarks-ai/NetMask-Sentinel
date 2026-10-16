@@ -40,7 +40,10 @@ from netmask.sensor import CaptureService
 from netmask.telemetry import RuntimeMetrics
 
 settings = Settings.from_env()
-asset_version = hashlib.sha256(Path("static/js/application.js").read_bytes()).hexdigest()[:12]
+asset_version = hashlib.sha256(
+    Path("static/js/application.js").read_bytes()
+    + Path("static/css/main.css").read_bytes()
+).hexdigest()[:12]
 
 
 def is_local_request():

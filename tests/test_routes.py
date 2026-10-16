@@ -110,6 +110,18 @@ class RouteTests(unittest.TestCase):
         self.authenticate()
         dashboard = self.client.get("/capture")
         self.assertIn(f"application.js?v={application.asset_version}".encode(), dashboard.data)
+        self.assertIn(f"main.css?v={application.asset_version}".encode(), dashboard.data)
+        for element_id in (
+            b'id="analyzed-flows"',
+            b'id="attack-rate"',
+            b'id="average-confidence"',
+            b'id="high-risk-flows"',
+            b'id="myChart"',
+            b'id="riskChart"',
+        ):
+            self.assertIn(element_id, dashboard.data)
+        self.assertIn("refreshDashboardAnalytics()", javascript)
+        self.assertIn("incident.max_attack_probability", javascript)
 
     def test_detail_keeps_network_fields_when_explanation_is_unavailable(self):
         self.authenticate()

@@ -175,6 +175,83 @@ body {
   .card-body {
     padding: 20px;
   }
+
+  .dashboard-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 18px;
+    margin-bottom: 24px;
+  }
+
+  .dashboard-stat-card {
+    display: flex;
+    align-items: center;
+    min-height: 126px;
+    gap: 16px;
+    padding: 20px;
+    border: 1px solid #edf1f7;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 6px 20px rgba(15, 23, 42, 0.07);
+  }
+
+  .dashboard-stat-icon {
+    display: grid;
+    flex: 0 0 52px;
+    width: 52px;
+    height: 52px;
+    place-items: center;
+    border-radius: 14px;
+    color: #fff;
+    background: #2563eb;
+    font-size: 22px;
+  }
+
+  .stat-attacks .dashboard-stat-icon { background: #dc2644; }
+  .stat-confidence .dashboard-stat-icon { background: linear-gradient(135deg, #4f46e5, #9333ea); }
+  .stat-high-risk .dashboard-stat-icon { background: #e85822; }
+
+  .dashboard-stat-label {
+    display: block;
+    color: #536174;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .dashboard-stat-card strong {
+    display: block;
+    margin: 3px 0 2px;
+    color: #172033;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 2rem;
+    line-height: 1.1;
+  }
+
+  .dashboard-stat-card small {
+    display: block;
+    color: #7a8595;
+    line-height: 1.25;
+  }
+
+  .dashboard-chart-row {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-chart-row > div,
+  .dashboard-chart-row .card {
+    display: flex;
+  }
+
+  .dashboard-chart-row .card {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .dashboard-chart-row .card-body { flex: 1; }
   
   /* Chart Section */
   .chart-container {
@@ -190,6 +267,13 @@ body {
     width: 100% !important;
     height: 100% !important;
   }
+
+  #riskChart {
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  .risk-chart-container { min-height: 360px; }
   
   /* Table Section */
   .table-responsive {
@@ -652,3 +736,15 @@ body {
 .incident-meta { color: #5c6675; font-size: 13px; }
 .incident-empty { color: #6c757d; margin: 0; }
 @media (max-width: 768px) { .incident-item { grid-template-columns: 1fr; } }
+
+@media (max-width: 1100px) {
+  .dashboard-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 767px) {
+  .main-container { padding: 16px; }
+  .dashboard-stats { grid-template-columns: 1fr; }
+  .dashboard-stat-card { min-height: 108px; }
+  .dashboard-chart-row { display: block; }
+  .chart-container, .risk-chart-container { height: 300px; min-height: 300px; }
+}

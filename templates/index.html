@@ -18,7 +18,7 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/css/toastr.min.css" rel="stylesheet">
   
   <!-- Custom CSS -->
-  <link href="{{ url_for('static', filename='css/main.css') }}" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/main.css', v=asset_version) }}" rel="stylesheet">
   
   <!-- Google Font -->
   <link href="https://fonts.googleapis.com/css?family=Montserrat:300,400,500,600,700|Open+Sans:300,400,700" rel="stylesheet">
@@ -73,9 +73,43 @@
       <button type="button" id="acknowledge-attack" class="btn btn-default btn-sm">Acknowledge</button>
     </section>
 
-    <!-- Chart -->
-    <div class="row">
-      <div class="col-md-12">
+    <section class="dashboard-stats" aria-label="Traffic risk summary">
+      <article class="dashboard-stat-card stat-analyzed">
+        <span class="dashboard-stat-icon"><i class="fas fa-network-wired"></i></span>
+        <div>
+          <span class="dashboard-stat-label">Analyzed Flows</span>
+          <strong id="analyzed-flows">0</strong>
+          <small>Current dashboard history</small>
+        </div>
+      </article>
+      <article class="dashboard-stat-card stat-attacks">
+        <span class="dashboard-stat-icon"><i class="fas fa-shield-virus"></i></span>
+        <div>
+          <span class="dashboard-stat-label">Attack Rate</span>
+          <strong id="attack-rate">0.0%</strong>
+          <small id="attack-count-label">0 suspicious flows</small>
+        </div>
+      </article>
+      <article class="dashboard-stat-card stat-confidence">
+        <span class="dashboard-stat-icon"><i class="fas fa-bullseye"></i></span>
+        <div>
+          <span class="dashboard-stat-label">Avg. Confidence</span>
+          <strong id="average-confidence">0.0%</strong>
+          <small>Mean predicted-class probability</small>
+        </div>
+      </article>
+      <article class="dashboard-stat-card stat-high-risk">
+        <span class="dashboard-stat-icon"><i class="fas fa-exclamation-triangle"></i></span>
+        <div>
+          <span class="dashboard-stat-label">High-Risk Flows</span>
+          <strong id="high-risk-flows">0</strong>
+          <small>High and very high risk</small>
+        </div>
+      </article>
+    </section>
+
+    <div class="row dashboard-chart-row">
+      <div class="col-md-8">
         <div class="card">
           <div class="card-header">
             <h3 class="card-title">Threat Activity Timeline</h3>
@@ -84,6 +118,19 @@
           <div class="card-body">
             <div class="chart-container">
               <canvas id="myChart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Risk Distribution</h3>
+            <p id="risk-chart-subtitle" class="chart-subtitle">Percentage of analyzed flows by risk level.</p>
+          </div>
+          <div class="card-body">
+            <div class="chart-container risk-chart-container">
+              <canvas id="riskChart"></canvas>
             </div>
           </div>
         </div>

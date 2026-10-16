@@ -38,6 +38,7 @@ $(document).ready(function () {
     let lastDesktopNotificationAt = 0;
     let lastSoundAt = 0;
     let lastToastAt = 0;
+    let latestIncidentItems = [];
 
     // Load saved flows from localStorage
     loadFlowsFromLocal();
@@ -247,6 +248,122 @@ if (auth) {
         }
     });
 
+    var riskChart = new Chart(document.getElementById("riskChart").getContext("2d"), {
+        type: "doughnut",
+        data: {
+            labels: ["Minimal", "Low", "Medium", "High", "Very High"],
+            datasets: [{
+                data: [0, 0, 0, 0, 0],
+                backgroundColor: ["#32c9a3", "#84cc4a", "#f4c542", "#f28c28", "#dc2644"],
+                borderColor: "#ffffff",
+                borderWidth: 3,
+                hoverBorderWidth: 3
+            }]
+        },
+        options: {
+            maintainAspectRatio: false,
+            cutoutPercentage: 66,
+            animation: { duration: 400 },
+            legend: {
+                display: true,
+                position: "bottom",
+                labels: { boxWidth: 12, padding: 12, fontColor: "#536174" }
+            },
+            tooltips: {
+                callbacks: {
+                    label: function(tooltipItem, data) {
+                        const value = Number(data.datasets[0].data[tooltipItem.index]) || 0;
+                        const total = data.datasets[0].data.reduce((sum, item) => sum + (Number(item) || 0), 0);
+                        const percentage = total ? ((value / total) * 100).toFixed(1) : "0.0";
+                        return ` ${data.labels[tooltipItem.index]}: ${value} (${percentage}%)`;
+                    }
+                }
+            }
+        }
+    });
+
+    function normalizeRisk(value) {
+        const normalized = String(value || "minimal").trim().toLowerCase().replace(/[\s-]+/g, "_");
+        return ["minimal", "low", "medium", "high", "very_high"].includes(normalized)
+            ? normalized
+            : "minimal";
+    }
+
+    function probabilityPercent(value) {
+        const parsed = Number.parseFloat(String(value ?? "").replace("%", ""));
+        if (!Number.isFinite(parsed)) return null;
+        return Math.max(0, Math.min(100, parsed <= 1 ? parsed * 100 : parsed));
+    }
+
+    function dashboardAnalytics() {
+        const riskCounts = {minimal: 0, low: 0, medium: 0, high: 0, very_high: 0};
+        let total = 0;
+        let attacks = 0;
+        let confidenceTotal = 0;
+        let confidenceCount = 0;
+
+        if (messages_received.length) {
+            messages_received.forEach((row) => {
+                total += 1;
+                const prediction = String(row && row[10] || "Unknown").trim().toLowerCase();
+                if (prediction !== "benign") attacks += 1;
+                const confidence = probabilityPercent(row && row[11]);
+                if (confidence !== null) {
+                    confidenceTotal += confidence;
+                    confidenceCount += 1;
+                }
+                riskCounts[normalizeRisk(row && row[12])] += 1;
+            });
+        } else {
+            // The hosted dashboard persists suspicious incidents, while full benign
+            // flow history remains local to the browser. Use incidents after reload
+            // so cloud viewers do not incorrectly see an empty risk summary.
+            latestIncidentItems.forEach((incident) => {
+                const count = Math.max(1, Number.parseInt(incident.event_count, 10) || 1);
+                total += count;
+                attacks += count;
+                riskCounts[normalizeRisk(incident.risk_level)] += count;
+                const confidence = probabilityPercent(incident.max_attack_probability);
+                if (confidence !== null) {
+                    confidenceTotal += confidence * count;
+                    confidenceCount += count;
+                }
+            });
+        }
+
+        return {
+            total,
+            attacks,
+            averageConfidence: confidenceCount ? confidenceTotal / confidenceCount : 0,
+            riskCounts
+        };
+    }
+
+    function refreshDashboardAnalytics() {
+        const analytics = dashboardAnalytics();
+        const attackRate = analytics.total ? (analytics.attacks / analytics.total) * 100 : 0;
+        const highRisk = analytics.riskCounts.high + analytics.riskCounts.very_high;
+        $("#analyzed-flows").text(analytics.total.toLocaleString());
+        $("#attack-rate").text(`${attackRate.toFixed(1)}%`);
+        $("#attack-count-label").text(`${analytics.attacks.toLocaleString()} suspicious ${analytics.attacks === 1 ? "flow" : "flows"}`);
+        $("#average-confidence").text(`${analytics.averageConfidence.toFixed(1)}%`);
+        $("#high-risk-flows").text(highRisk.toLocaleString());
+
+        riskChart.data.datasets[0].data = [
+            analytics.riskCounts.minimal,
+            analytics.riskCounts.low,
+            analytics.riskCounts.medium,
+            analytics.riskCounts.high,
+            analytics.riskCounts.very_high
+        ];
+        riskChart.update();
+        $("#risk-chart-subtitle").text(analytics.total
+            ? `${analytics.total.toLocaleString()} analyzed ${analytics.total === 1 ? "flow" : "flows"} by risk level.`
+            : "No analyzed flow data yet.");
+    }
+
+    refreshDashboardAnalytics();
+
     // Setup real-time stats listener with enhanced error handling
     function setupGlobalStatsListener() {
         db.collection("global_stats").doc("realtime")
@@ -451,6 +568,8 @@ if (auth) {
         const list = document.getElementById("incident-list");
         const summaryNode = document.getElementById("incident-summary");
         if (!list || !summaryNode) return;
+        latestIncidentItems = Array.isArray(items) ? items : [];
+        refreshDashboardAnalytics();
         const openCount = summary && Number(summary.new) ? Number(summary.new) : 0;
         summaryNode.textContent = `${openCount} open`;
         if (!Array.isArray(items) || items.length === 0) {
@@ -475,7 +594,7 @@ if (auth) {
     }
 
     function refreshIncidents() {
-        fetch('/api/incidents?limit=10', {headers: {'Accept': 'application/json'}})
+        fetch('/api/incidents?limit=100', {headers: {'Accept': 'application/json'}})
             .then((response) => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
             .then((payload) => renderIncidents(payload.items, payload.summary))
             .catch((error) => console.warn("Incident refresh unavailable:", error));
@@ -631,6 +750,7 @@ $(document).on('click', '#logout-button', function(e) {
 
             // Update chart based on all captured rows for stable visualization.
             refreshFlowChart();
+            refreshDashboardAnalytics();
             
             // Debug information
             console.log("Received classification:", msg.classification);
