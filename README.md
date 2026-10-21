@@ -427,3 +427,10 @@ Use NetMask Sentinel only on computers and networks you own or have explicit aut
 ## License
 
 Released under the MIT License. See `LICENSE`.
+
+<!-- beyond-marks-credit:start -->
+---
+### Built by Beyond Marks AI Academy
+
+Developed by **Rakesh Kumar** at [Beyond Marks AI Academy](https://beyondmarks.ai).
+<!-- beyond-marks-credit:end -->
