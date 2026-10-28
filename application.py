@@ -1,6 +1,7 @@
 from datetime import datetime
 from pathlib import Path
 from threading import Lock
+from collections import deque
 import atexit
 import csv
 import hashlib
@@ -42,6 +43,7 @@ from netmask.telemetry import RuntimeMetrics
 settings = Settings.from_env()
 asset_version = hashlib.sha256(
     Path("static/js/application.js").read_bytes()
+    + Path("static/js/simple-charts.js").read_bytes()
     + Path("static/css/main.css").read_bytes()
 ).hexdigest()[:12]
 
@@ -209,8 +211,30 @@ ae_features = np.array(['FlowDuration',
 'IdleMax',
 'IdleMin'])
 
-flow_count = 0
-flow_df = pd.DataFrame(columns=cols)
+def _load_recent_flow_history(path: Path, limit: int = 500) -> pd.DataFrame:
+    """Restore recent detail rows without loading an ever-growing CSV into memory."""
+    if not path.exists() or path.stat().st_size == 0:
+        return pd.DataFrame(columns=cols)
+    try:
+        with path.open("r", newline="", encoding="utf-8") as source:
+            header = source.readline()
+            recent_lines = deque(source, maxlen=max(1, limit))
+        rows = list(csv.DictReader([header, *recent_lines]))
+        restored = pd.DataFrame(rows).reindex(columns=cols)
+        restored["FlowID"] = pd.to_numeric(restored["FlowID"], errors="coerce")
+        restored = restored.dropna(subset=["FlowID"])
+        restored["FlowID"] = restored["FlowID"].astype(int)
+        for feature_name in cols[1:40]:
+            restored[feature_name] = pd.to_numeric(restored[feature_name], errors="coerce")
+        restored = restored.dropna(subset=cols[1:40])
+        return restored.drop_duplicates(subset=["FlowID"], keep="last").reset_index(drop=True)
+    except (OSError, csv.Error, ValueError, KeyError) as exc:
+        logger.warning("Could not restore recent flow details from %s: %s", path, exc)
+        return pd.DataFrame(columns=cols)
+
+
+flow_df = _load_recent_flow_history(runtime_dir / "captured_flows.csv")
+flow_count = int(flow_df["FlowID"].max()) if not flow_df.empty else 0
 
 src_ip_dict = {}
 

@@ -21,14 +21,14 @@ $(document).ready(function () {
     }
 
     // Initialize Socket.IO connection
-    socket = io('/test', {
+    socket = typeof io === "function" ? io('/test', {
         transports: ['websocket', 'polling'],
         upgrade: true,
         reconnection: true,
         reconnectionAttempts: Infinity,
         reconnectionDelay: 1000,
         timeout: 10000
-    });
+    }) : {on: function() {}};
     let socketHasConnected = false;
     let connectionErrorShown = false;
     var ctx = document.getElementById("myChart").getContext('2d');
@@ -104,7 +104,14 @@ if (auth) {
     }
 
     function buildThreatTimeline(windowMinutes) {
-        const now = new Date();
+        const usePersistedIncidents = window.location.protocol === "https:" && latestIncidentItems.length > 0;
+        const newestIncident = usePersistedIncidents
+            ? latestIncidentItems.reduce((latest, incident) => {
+                const parsed = new Date(incident.last_seen || incident.first_seen || 0);
+                return !Number.isNaN(parsed.getTime()) && parsed > latest ? parsed : latest;
+            }, new Date(0))
+            : null;
+        const now = newestIncident && newestIncident.getTime() > 0 ? newestIncident : new Date();
         const points = [];
         const labels = [];
         const attacks = [];
@@ -127,6 +134,19 @@ if (auth) {
 
         let totalAttacks = 0;
         let totalBenign = 0;
+        if (usePersistedIncidents) {
+            latestIncidentItems.forEach((incident) => {
+                const rawTime = incident.last_seen || incident.first_seen;
+                const parsed = rawTime ? new Date(rawTime) : null;
+                if (!parsed || Number.isNaN(parsed.getTime())) return;
+                const idx = indexMap[floorToMinute(parsed).getTime()];
+                if (idx === undefined) return;
+                const count = Math.max(1, Number.parseInt(incident.event_count, 10) || 1);
+                attacks[idx] += count;
+                totalAttacks += count;
+            });
+            return {labels, attacks, benign, totalAttacks, totalBenign, persisted: true};
+        }
         for (let i = 0; i < messages_received.length; i++) {
             const row = messages_received[i];
             const ts = floorToMinute(getFlowTimestamp(row)).getTime();
@@ -149,7 +169,8 @@ if (auth) {
             attacks,
             benign,
             totalAttacks,
-            totalBenign
+            totalBenign,
+            persisted: false
         };
     }
 
@@ -172,8 +193,9 @@ if (auth) {
         myChart.update();
 
         const attackRate = ((timeline.totalAttacks / totalFlows) * 100).toFixed(1);
-        updateChartSubtitle(
-            `Last 10 min: ${timeline.totalAttacks} attacks, ${timeline.totalBenign} benign (${attackRate}% attack rate)`
+        updateChartSubtitle(timeline.persisted
+            ? `Latest persisted activity: ${timeline.totalAttacks} suspicious events.`
+            : `Last 10 min: ${timeline.totalAttacks} attacks, ${timeline.totalBenign} benign (${attackRate}% attack rate)`
         );
     }
 
@@ -302,7 +324,8 @@ if (auth) {
         let confidenceTotal = 0;
         let confidenceCount = 0;
 
-        if (messages_received.length) {
+        const usePersistedIncidents = window.location.protocol === "https:" && latestIncidentItems.length > 0;
+        if (messages_received.length && !usePersistedIncidents) {
             messages_received.forEach((row) => {
                 total += 1;
                 const prediction = String(row && row[10] || "Unknown").trim().toLowerCase();
@@ -570,6 +593,7 @@ if (auth) {
         if (!list || !summaryNode) return;
         latestIncidentItems = Array.isArray(items) ? items : [];
         refreshDashboardAnalytics();
+        refreshFlowChart();
         const openCount = summary && Number(summary.new) ? Number(summary.new) : 0;
         summaryNode.textContent = `${openCount} open`;
         if (!Array.isArray(items) || items.length === 0) {

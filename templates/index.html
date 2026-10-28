@@ -227,12 +227,13 @@
     </div>
   </noscript>
 
-  <!-- jQuery -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+  <!-- jQuery is bundled so the offline dashboard never depends on a CDN. -->
+  <script src="{{ url_for('static', filename='js/jquery-2.1.1.js') }}"></script>
   <!-- Bootstrap JS -->
   <script src="{{ url_for('static', filename='js/bootstrap.js') }}"></script>
   <!-- Chart.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.5.0/Chart.min.js"></script>
+  <script src="{{ url_for('static', filename='js/simple-charts.js', v=asset_version) }}"></script>
   <!-- Socket.IO -->
   <script src="https://cdn.socket.io/4.4.1/socket.io.min.js"></script>
   <!-- Toastr JS -->
@@ -244,6 +245,13 @@
   
   <!-- Initialize Toastr -->
   <script>
+    window.toastr = window.toastr || {
+      options: {},
+      info: function(message) { console.info(message); },
+      success: function(message) { console.info(message); },
+      warning: function(message) { console.warn(message); },
+      error: function(message) { console.error(message); }
+    };
     // Configure toastr defaults
     toastr.options = {
       closeButton: true,

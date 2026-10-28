@@ -1,7 +1,10 @@
+import csv
 import os
+import tempfile
 import unittest
 import uuid
 from dataclasses import replace
+from pathlib import Path
 from unittest.mock import patch
 
 os.environ["CAPTURE_ENABLED"] = "false"
@@ -111,13 +114,15 @@ class RouteTests(unittest.TestCase):
         script = application.app.static_folder + "/js/application.js"
         with open(script, "r", encoding="utf-8") as source:
             javascript = source.read()
-        self.assertIn("socket = io('/test'", javascript)
+        self.assertIn("typeof io === \"function\" ? io('/test'", javascript)
         self.assertNotIn("io.connect('http://'", javascript)
         self.assertIn("setInterval(refreshIncidents, 5000)", javascript)
+        self.assertIn("latestIncidentItems", javascript)
         self.authenticate()
         dashboard = self.client.get("/capture")
         self.assertIn(f"application.js?v={application.asset_version}".encode(), dashboard.data)
         self.assertIn(f"main.css?v={application.asset_version}".encode(), dashboard.data)
+        self.assertIn(f"simple-charts.js?v={application.asset_version}".encode(), dashboard.data)
         for element_id in (
             b'id="analyzed-flows"',
             b'id="attack-rate"',
@@ -129,6 +134,25 @@ class RouteTests(unittest.TestCase):
             self.assertIn(element_id, dashboard.data)
         self.assertIn("refreshDashboardAnalytics()", javascript)
         self.assertIn("incident.max_attack_probability", javascript)
+
+    def test_recent_flow_history_restores_details_and_latest_duplicate(self):
+        first = {column: "0" for column in application.cols}
+        first.update({"FlowID": "41", "Src": "10.0.0.1", "Dest": "10.0.0.2",
+                      "Protocol": "TCP", "Classification": "Benign", "Probability": "0.9", "Risk": "Minimal"})
+        latest = dict(first)
+        latest["Src"] = "10.0.0.99"
+        latest["Probability"] = "0.99"
+        with tempfile.TemporaryDirectory() as directory:
+            history_path = Path(directory) / "captured_flows.csv"
+            with history_path.open("w", newline="", encoding="utf-8") as destination:
+                writer = csv.DictWriter(destination, fieldnames=application.cols)
+                writer.writeheader()
+                writer.writerow(first)
+                writer.writerow(latest)
+            restored = application._load_recent_flow_history(history_path)
+        self.assertEqual(len(restored), 1)
+        self.assertEqual(int(restored.iloc[0]["FlowID"]), 41)
+        self.assertEqual(restored.iloc[0]["Src"], "10.0.0.99")
 
     def test_detail_keeps_network_fields_when_explanation_is_unavailable(self):
         self.authenticate()
