@@ -15,7 +15,7 @@ $PidFile = Join-Path $RuntimeDir "netmask.pid"
 $LabTokenFile = Join-Path $RuntimeDir "lab-alert.token"
 $CloudSensorConfig = Join-Path $RuntimeDir "cloud-sensor.json"
 $HealthUrl = "http://127.0.0.1:5000/health/ready"
-$DashboardUrl = "http://127.0.0.1:5000/guest"
+$DashboardUrl = "http://127.0.0.1:5000/"
 
 Set-Location -LiteralPath $ProjectDir
 Remove-Item Env:PYTHONHOME, Env:PYTHONPATH -ErrorAction SilentlyContinue

@@ -81,7 +81,7 @@ The launcher automatically:
 - verifies that Npcap is running;
 - starts NetMask in the background;
 - enables private-LAN testing on port 5000;
-- opens the local guest dashboard.
+- opens the local login page.
 
 Open the dashboard manually at:
 
@@ -112,7 +112,7 @@ organization's software-installation policy. During Npcap setup, enable
 **WinPcap API-compatible mode**. When Windows Firewall prompts, allow Python
 on **Private networks only**.
 
-After setup, open `http://127.0.0.1:5000/guest`. Local signup and login work
+After setup, open `http://127.0.0.1:5000/`. Local signup and login work
 without Firebase: accounts are password-hashed and stored only in that
 computer's ignored `runtime/accounts.sqlite3` file.
 
@@ -189,7 +189,7 @@ NetMask reads environment variables directly. Copy values from `.env.example` in
 | `NETMASK_PORT` | `5000` | Dashboard/API port. |
 | `FLASK_SECRET_KEY` | generated in development | Required with at least 32 characters in production. |
 | `FLASK_DEBUG` | `false` | Enables Flask debugging only outside production. |
-| `ENABLE_GUEST_ACCESS` | development only | Enables the local guest dashboard. |
+| `ENABLE_GUEST_ACCESS` | `false` | Optional development-only guest route; the standard interface requires login. |
 | `ENABLE_DEBUG_ROUTES` | development only | Enables local simulation and diagnostic routes. |
 | `CAPTURE_ENABLED` | `true` | Starts the live packet sensor. |
 | `CAPTURE_INTERFACE` | default interface | Optional Scapy/Npcap interface name. |

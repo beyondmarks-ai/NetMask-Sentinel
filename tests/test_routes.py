@@ -52,6 +52,13 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Recent Incidents", response.data)
 
+    def test_landing_only_offers_login_and_signup(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'id="heroLoginBtn"', response.data)
+        self.assertIn(b'id="heroSignupBtn"', response.data)
+        self.assertNotIn(b"Skip - View Dashboard", response.data)
+
     def test_local_signup_and_login_work_without_firebase(self):
         self.client.get("/signup")
         with self.client.session_transaction() as browser_session:
@@ -217,10 +224,60 @@ class RouteTests(unittest.TestCase):
             protocol="TCP", risk_level="high", attack_probability=0.88, flow_id="share-test"
         )
         route = f"/api/incidents/{incident.incident_id}/share"
-        with patch("application.azure_store.create_share", return_value=("secret-share-token", "2030-01-01T00:00:00+00:00")):
+        with patch("application.azure_store.configured", return_value=True), patch(
+            "application.azure_store.get_incident", return_value=incident.to_dict()
+        ), patch(
+            "application.azure_store.create_share",
+            return_value=("secret-share-token", "2030-01-01T00:00:00+00:00"),
+        ):
             response = self.client.post(route, headers={"X-CSRF-Token": "test-token"})
         self.assertEqual(response.status_code, 200)
         self.assertIn("/share/secret-share-token", response.get_json()["url"])
+
+    def test_local_share_uses_configured_hosted_dashboard(self):
+        self.authenticate()
+        incident = application.incident_manager.record(
+            classification="Authorized Test", source_ip="192.168.1.20", destination_ip="192.168.1.8",
+            protocol="TCP", risk_level="high", attack_probability=0.95, flow_id="local-share-test"
+        )
+        hosted = {
+            "success": True,
+            "url": "https://dashboard.example/share/hosted-token",
+            "expires_at": "2030-01-01T00:00:00+00:00",
+        }
+        with patch("application.azure_store.configured", return_value=False), patch.object(
+            application.cloud_reporter, "create_share", return_value=hosted
+        ) as create_share:
+            response = self.client.post(
+                f"/api/incidents/{incident.incident_id}/share",
+                headers={"X-CSRF-Token": "test-token"},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["url"], hosted["url"])
+        create_share.assert_called_once()
+
+    def test_sensor_can_create_hosted_share_with_bearer_token(self):
+        payload = {
+            "incident_id": "INC-SENSOR-1", "classification": "Probe",
+            "source_ip": "192.168.1.20", "destination_ip": "192.168.1.8",
+            "protocol": "TCP", "risk_level": "high", "event_count": 1,
+            "max_attack_probability": 0.91, "sensor_id": "sensor-a",
+        }
+        hosted_settings = replace(application.settings, sensor_ingest_token="x" * 48)
+        with patch.object(application, "settings", hosted_settings), patch(
+            "application.azure_store.configured", return_value=True
+        ), patch(
+            "application.azure_store.create_share",
+            return_value=("sensor-share-token", "2030-01-01T00:00:00+00:00"),
+        ):
+            denied = self.client.post("/api/sensor/share", json=payload)
+            accepted = self.client.post(
+                "/api/sensor/share", json=payload,
+                headers={"Authorization": f"Bearer {'x' * 48}"},
+            )
+        self.assertEqual(denied.status_code, 401)
+        self.assertEqual(accepted.status_code, 200)
+        self.assertIn("/share/sensor-share-token", accepted.get_json()["url"])
 
     def test_public_share_page_displays_observed_source_ip(self):
         report = {

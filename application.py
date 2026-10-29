@@ -83,7 +83,7 @@ def protect_state_changes():
         return None
     if request.endpoint == "authorized_lab_alert" and settings.debug_routes:
         return None
-    if request.endpoint == "ingest_sensor_event":
+    if request.endpoint in {"ingest_sensor_event", "create_sensor_share"}:
         return None
     supplied = request.headers.get("X-CSRF-Token") or request.form.get("csrf_token")
     expected = session.get("csrf_token", "")
@@ -552,11 +552,55 @@ def share_incident(incident_id):
     incident = _find_incident(incident_id)
     if not incident:
         return jsonify({"error": "incident_not_found"}), 404
+    expires_hours = min(max(request.args.get("hours", 168, type=int), 1), 720)
     try:
-        expires_hours = min(max(request.args.get("hours", 168, type=int), 1), 720)
+        if not azure_store.configured():
+            shared = cloud_reporter.create_share(incident, expires_hours=expires_hours)
+            return jsonify(shared)
         token, expires_at = azure_store.create_share(incident, expires_hours=expires_hours)
     except RuntimeError as exc:
         return jsonify({"error": "sharing_unavailable", "message": str(exc)}), 503
+    return jsonify({
+        "success": True,
+        "url": url_for("shared_incident", token=token, _external=True),
+        "expires_at": expires_at,
+    })
+
+
+@app.post('/api/sensor/share')
+def create_sensor_share():
+    """Create a hosted report link for an authenticated sensor installation."""
+    expected = settings.sensor_ingest_token
+    supplied = request.headers.get("Authorization", "")
+    if not expected or not hmac.compare_digest(supplied, f"Bearer {expected}"):
+        return jsonify({"error": "sensor_authentication_required"}), 401
+    if not azure_store.configured():
+        return jsonify({"error": "sharing_unavailable", "message": "Azure report storage is unavailable."}), 503
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        incident = {
+            "incident_id": str(payload["incident_id"])[:128],
+            "classification": str(payload.get("classification", "Unknown"))[:128],
+            "source_ip": str(ipaddress.ip_address(str(payload["source_ip"]))),
+            "destination_ip": str(ipaddress.ip_address(str(payload["destination_ip"]))),
+            "protocol": str(payload.get("protocol", "unknown"))[:20],
+            "risk_level": str(payload.get("risk_level", "unknown")).lower(),
+            "status": str(payload.get("status", "new"))[:32],
+            "event_count": min(max(int(payload.get("event_count", 1)), 1), 1_000_000),
+            "first_seen": str(payload.get("first_seen", ""))[:64],
+            "last_seen": str(payload.get("last_seen", ""))[:64],
+            "max_attack_probability": min(max(float(payload.get("max_attack_probability", 0.0)), 0.0), 1.0),
+            "latest_flow_id": str(payload.get("latest_flow_id", ""))[:128],
+            "sensor_id": str(payload.get("sensor_id", "unknown-sensor"))[:128],
+        }
+        if incident["risk_level"] not in {"minimal", "low", "medium", "high", "very_high"}:
+            raise ValueError("invalid risk")
+        expires_hours = min(max(int(payload.get("expires_hours", 168)), 1), 720)
+    except (KeyError, TypeError, ValueError):
+        return jsonify({"error": "invalid_share_report"}), 400
+
+    token, expires_at = azure_store.create_share(incident, expires_hours=expires_hours)
     return jsonify({
         "success": True,
         "url": url_for("shared_incident", token=token, _external=True),

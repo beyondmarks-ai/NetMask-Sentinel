@@ -58,7 +58,7 @@ class Settings:
             environment=environment,
             secret_key=secret_key,
             debug=_bool("FLASK_DEBUG", False) and not production,
-            guest_access=_bool("ENABLE_GUEST_ACCESS", not production),
+            guest_access=_bool("ENABLE_GUEST_ACCESS", False),
             debug_routes=_bool("ENABLE_DEBUG_ROUTES", not production),
             capture_enabled=_bool("CAPTURE_ENABLED", True),
             capture_interface=os.environ.get("CAPTURE_INTERFACE") or None,

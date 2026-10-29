@@ -44,4 +44,4 @@ if (-not (Test-Path -LiteralPath $venvPython)) {
 & $venvPython -m pip install -r (Join-Path $ProjectDir "requirements.txt")
 if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed." }
 & (Join-Path $ProjectDir "Start-NetMask.ps1") -NoBrowser
-Write-Host "NetMask Sentinel is ready at http://127.0.0.1:5000/guest"
+Write-Host "NetMask Sentinel is ready at http://127.0.0.1:5000/"
