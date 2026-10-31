@@ -735,6 +735,10 @@ body {
 .incident-id { font-family: Consolas, monospace; font-weight: 700; }
 .incident-meta { color: #5c6675; font-size: 13px; }
 .incident-empty { color: #6c757d; margin: 0; }
+.share-result { grid-column: 1 / -1; display: grid; gap: 8px; padding: 12px; border: 1px solid #b8e0cc; border-radius: 8px; background: #f0fff7; }
+.share-link-controls { display: flex; align-items: center; gap: 8px; }
+.share-link-controls .share-link-value { min-width: 0; font-family: Consolas, monospace; }
+.share-link-controls .btn { flex: 0 0 auto; }
 @media (max-width: 768px) { .incident-item { grid-template-columns: 1fr; } }
 
 @media (max-width: 1100px) {
@@ -747,4 +751,5 @@ body {
   .dashboard-stat-card { min-height: 108px; }
   .dashboard-chart-row { display: block; }
   .chart-container, .risk-chart-container { height: 300px; min-height: 300px; }
+  .share-link-controls { align-items: stretch; flex-direction: column; }
 }

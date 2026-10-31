@@ -141,6 +141,9 @@ class RouteTests(unittest.TestCase):
             self.assertIn(element_id, dashboard.data)
         self.assertIn("refreshDashboardAnalytics()", javascript)
         self.assertIn("incident.max_attack_probability", javascript)
+        self.assertIn("Report link ready", javascript)
+        self.assertIn("copy-report-link", javascript)
+        self.assertNotIn('await navigator.clipboard.writeText(payload.url)', javascript)
 
     def test_recent_flow_history_restores_details_and_latest_duplicate(self):
         first = {column: "0" for column in application.cols}

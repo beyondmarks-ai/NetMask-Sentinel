@@ -39,6 +39,7 @@ $(document).ready(function () {
     let lastSoundAt = 0;
     let lastToastAt = 0;
     let latestIncidentItems = [];
+    const createdShareLinks = new Map();
 
     // Load saved flows from localStorage
     loadFlowsFromLocal();
@@ -604,17 +605,36 @@ if (auth) {
             const risk = String(incident.risk_level || "medium").toLowerCase();
             const status = String(incident.status || "new").toLowerCase();
             const route = `${incident.source_ip || "?"} → ${incident.destination_ip || "?"}`;
+            const incidentId = String(incident.incident_id || "");
             const acknowledge = status === "new"
-                ? `<button type="button" class="btn btn-default btn-sm acknowledge-incident" data-incident-id="${escapedFlowValue(incident.incident_id)}">Acknowledge</button>`
+                ? `<button type="button" class="btn btn-default btn-sm acknowledge-incident" data-incident-id="${escapedFlowValue(incidentId)}">Acknowledge</button>`
                 : '<span class="incident-meta">Acknowledged</span>';
-            const share = `<button type="button" class="btn btn-primary btn-sm share-incident" data-incident-id="${escapedFlowValue(incident.incident_id)}">Share</button>`;
-            return `<article class="incident-item" data-risk="${escapedFlowValue(risk)}" data-status="${escapedFlowValue(status)}">
+            const share = `<button type="button" class="btn btn-primary btn-sm share-incident" data-incident-id="${escapedFlowValue(incidentId)}">Share</button>`;
+            const shared = createdShareLinks.get(incidentId);
+            const shareResult = shared ? shareResultMarkup(shared.url, shared.expiresAt) : "";
+            return `<article class="incident-item" data-incident-id="${escapedFlowValue(incidentId)}" data-risk="${escapedFlowValue(risk)}" data-status="${escapedFlowValue(status)}">
                 <div><div class="incident-id">${escapedFlowValue(incident.incident_id)}</div><div class="incident-meta">${escapedFlowValue(risk.replaceAll("_", " "))}</div></div>
                 <div><strong>${escapedFlowValue(incident.classification)}</strong><div class="incident-meta">${escapedFlowValue(route)} · ${escapedFlowValue(incident.protocol)}</div></div>
                 <span>${escapedFlowValue(incident.event_count || 1)} event(s)</span>
                 <div>${acknowledge} ${share}</div>
+                ${shareResult}
             </article>`;
         }).join("");
+    }
+
+    function shareResultMarkup(url, expiresAt) {
+        const safeUrl = escapedFlowValue(url);
+        const expiry = expiresAt
+            ? `<span class="incident-meta">Expires ${escapedFlowValue(new Date(expiresAt).toLocaleString())}</span>`
+            : "";
+        return `<div class="share-result" role="status">
+            <div><strong>Report link ready</strong> ${expiry}</div>
+            <div class="share-link-controls">
+                <input type="text" class="form-control share-link-value" value="${safeUrl}" readonly aria-label="Shareable report URL">
+                <button type="button" class="btn btn-default btn-sm copy-report-link">Copy Link</button>
+                <a class="btn btn-primary btn-sm" href="${safeUrl}" target="_blank" rel="noopener noreferrer">Open Report</a>
+            </div>
+        </div>`;
     }
 
     function refreshIncidents() {
@@ -639,7 +659,9 @@ if (auth) {
     });
 
     $(document).on('click', '.share-incident', function () {
-        const incidentId = $(this).data('incident-id');
+        const $button = $(this);
+        const incidentId = String($button.data('incident-id'));
+        $button.prop('disabled', true).text('Creating...');
         fetch(`/api/incidents/${encodeURIComponent(incidentId)}/share`, {
             method: 'POST',
             headers: {
@@ -649,13 +671,37 @@ if (auth) {
         }).then(async (response) => {
             const payload = await response.json();
             if (!response.ok) throw new Error(payload.message || `HTTP ${response.status}`);
+            createdShareLinks.set(incidentId, {url: payload.url, expiresAt: payload.expires_at});
+            const $incident = $button.closest('.incident-item');
+            $incident.find('.share-result').remove();
+            $incident.append(shareResultMarkup(payload.url, payload.expires_at));
+            toastr.success("Report link created. Use Copy Link or Open Report.");
             if (navigator.clipboard && window.isSecureContext) {
-                await navigator.clipboard.writeText(payload.url);
-                toastr.success("Expiring report link copied to clipboard.");
-            } else {
-                window.prompt("Copy this expiring report link:", payload.url);
+                navigator.clipboard.writeText(payload.url).catch(() => {
+                    console.info("Clipboard permission was unavailable; the report URL remains visible.");
+                });
             }
-        }).catch((error) => toastr.error(`Could not create report link: ${error.message}`));
+        }).catch((error) => toastr.error(`Could not create report link: ${error.message}`))
+          .finally(() => $button.prop('disabled', false).text('Share'));
+    });
+
+    $(document).on('click', '.copy-report-link', function () {
+        const input = $(this).closest('.share-link-controls').find('.share-link-value').get(0);
+        if (!input) return;
+        const copied = navigator.clipboard && window.isSecureContext
+            ? navigator.clipboard.writeText(input.value)
+            : new Promise((resolve, reject) => {
+                input.focus();
+                input.select();
+                try { document.execCommand('copy') ? resolve() : reject(new Error('copy failed')); }
+                catch (error) { reject(error); }
+            });
+        copied.then(() => toastr.success("Report link copied to clipboard."))
+            .catch(() => {
+                input.focus();
+                input.select();
+                toastr.info("Press Ctrl+C to copy the selected report link.");
+            });
     });
 
     // Update table with pagination
