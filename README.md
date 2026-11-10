@@ -212,7 +212,7 @@ NetMask works locally without Firebase. To enable cloud authentication and histo
 
 Never commit service-account JSON, API secrets, access tokens, packet captures containing personal data, or production logs.
 
-## Azure hosted dashboard and share links
+## Azure hosted dashboard
 
 The hosted architecture does not use Microsoft Entra External ID. NetMask keeps
 its own signup/sign-in flow, hashes passwords with scrypt, and stores account
@@ -248,11 +248,9 @@ administrator's ignored `runtime/azure-deployment.json`, then run:
 ```
 
 Restart NetMask afterward. Detected incidents appear on the hosted dashboard
-with the packet's observed source and destination IPs. A signed-in user can
-press **Share** to create an unguessable report URL that expires after seven
-days. The public report is a read-only snapshot and clearly labels the address
-as an observed source IP; NAT, VPNs, proxies, and spoofing can obscure the true
-origin.
+with the packet's observed source and destination IPs. Report-link creation is
+disabled on both local and hosted dashboards. NAT, VPNs, proxies, and spoofing
+can obscure the true origin of an observed source IP.
 
 To remove the Azure deployment and stop its charges:
 
