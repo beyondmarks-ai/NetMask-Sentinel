@@ -7,6 +7,7 @@ from collections import deque
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any
+from uuid import uuid4
 
 SEVERITY_ORDER = {"minimal": 0, "low": 1, "medium": 2, "high": 3, "very_high": 4}
 
@@ -35,6 +36,7 @@ class Incident:
     associated_process: str = "Not resolved"
     associated_pid: str = ""
     component_type: str = "Network endpoint/service"
+    simulated: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -80,6 +82,7 @@ class IncidentManager:
         associated_process: str = "Not resolved",
         associated_pid: str = "",
         component_type: str = "Network endpoint/service",
+        simulated: bool = False,
         occurred_at: datetime | None = None,
     ) -> Incident:
         now = occurred_at or _utc_now()
@@ -97,6 +100,7 @@ class IncidentManager:
                 existing.associated_process = associated_process
                 existing.associated_pid = associated_pid
                 existing.component_type = component_type
+                existing.simulated = existing.simulated or simulated
                 existing.max_attack_probability = max(
                     existing.max_attack_probability, float(attack_probability)
                 )
@@ -106,7 +110,7 @@ class IncidentManager:
 
             self._counter += 1
             incident = Incident(
-                incident_id=f"INC-{now:%Y%m%d}-{self._counter:06d}",
+                incident_id=f"INC-{now:%Y%m%d}-{self._counter:06d}-{uuid4().hex[:8].upper()}",
                 key=key,
                 classification=classification,
                 source_ip=source_ip,
@@ -122,6 +126,7 @@ class IncidentManager:
                 associated_process=associated_process,
                 associated_pid=associated_pid,
                 component_type=component_type,
+                simulated=simulated,
             )
             self._incidents.appendleft(incident)
             self._active_by_key[key] = incident

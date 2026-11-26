@@ -19,6 +19,9 @@
     <div class="card mb-4">
       <div class="card-header"><h3 class="card-title">Attack Incident Details</h3></div>
       <div class="card-body">
+        {% if incident.simulated %}
+          <div class="alert alert-warning"><strong>SIMULATED DEMO - NOT A REAL ATTACK.</strong> This record was generated safely for presentation and testing; no attack traffic was sent.</div>
+        {% endif %}
         <p class="risk-badge risk-{{ incident.risk_level|lower|replace(' ', '_') }}">{{ incident.risk_level|replace('_', ' ')|title }} risk</p>
         <div class="alert alert-info">The source IP is observed network evidence. It identifies the traffic source seen by the sensor, but does not by itself prove a person's identity.</div>
         <div class="table-responsive">
@@ -32,15 +35,25 @@
               <tr><th>Observed component type</th><td><strong>{{ incident.component_type or 'Network endpoint/service' }}</strong></td></tr>
               <tr><th>Associated Windows process</th><td>{{ incident.associated_process or 'Not resolved' }}{% if incident.associated_pid %} (PID {{ incident.associated_pid }}){% endif %}</td></tr>
               <tr><th>Network protocol</th><td>{{ incident.protocol }}</td></tr>
-              <tr><th>AI attack probability</th><td>{{ '%.1f%%'|format((incident.max_attack_probability|float) * 100) }}</td></tr>
+              <tr><th>{% if incident.simulated %}Demo scenario score{% else %}AI attack probability{% endif %}</th><td>{{ '%.1f%%'|format((incident.max_attack_probability|float) * 100) }}</td></tr>
               <tr><th>Events correlated</th><td>{{ incident.event_count }}</td></tr>
               <tr><th>First seen</th><td>{{ incident.first_seen }}</td></tr>
               <tr><th>Last seen</th><td>{{ incident.last_seen }}</td></tr>
               <tr><th>Sensor</th><td>{{ incident.sensor_id or 'Local sensor' }}</td></tr>
               <tr><th>Status</th><td>{{ incident.status|title }}</td></tr>
-              <tr><th>AI model</th><td>{{ model.framework }} {{ model.model_type }} ({{ model.feature_count }} traffic features)</td></tr>
+              <tr><th>Analysis source</th><td>{% if incident.simulated %}Safe demo generator (not model inference){% else %}{{ model.framework }} {{ model.model_type }} ({{ model.feature_count }} traffic features){% endif %}</td></tr>
             </tbody>
           </table>
+        </div>
+        <div class="card mb-4">
+          <div class="card-header"><h3 class="card-title">Attack Analysis and Recommended Response</h3></div>
+          <div class="card-body">
+            <p><strong>Observed behavior:</strong> {{ attack_guidance.behavior }}</p>
+            <p><strong>Possible impact:</strong> {{ attack_guidance.impact }}</p>
+            <p><strong>Related technique:</strong> {{ attack_guidance.technique }}</p>
+            <h4>Recommended actions</h4>
+            <ol>{% for action in attack_guidance.actions %}<li>{{ action }}</li>{% endfor %}</ol>
+          </div>
         </div>
         <div class="alert alert-warning">This identifies the observed network destination and associated local process. Network monitoring alone does not prove that Windows or an application was successfully compromised.</div>
         {% if full_flow_id is not none %}

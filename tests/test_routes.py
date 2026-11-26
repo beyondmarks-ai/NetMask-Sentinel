@@ -142,6 +142,7 @@ class RouteTests(unittest.TestCase):
             b'id="model-type"',
             b'id="model-classes"',
             b'id="traffic-filter"',
+            b'id="run-safe-demo"',
         ):
             self.assertIn(element_id, dashboard.data)
         self.assertIn("refreshDashboardAnalytics()", javascript)
@@ -214,6 +215,7 @@ class RouteTests(unittest.TestCase):
         self.assertIn(b"94.0%", response.data)
         self.assertIn(b"HTTPS web application", response.data)
         self.assertIn(b"nginx.exe", response.data)
+        self.assertIn(b"Endpoint Denial of Service", response.data)
 
     def test_target_context_distinguishes_windows_system_and_application_processes(self):
         windows = application.describe_target({"DestPort": 445, "PName": "svchost.exe", "PID": 100})
@@ -226,6 +228,27 @@ class RouteTests(unittest.TestCase):
     def test_incident_detail_requires_login(self):
         response = self.client.get("/incident-detail?incident_id=INC-test")
         self.assertEqual(response.status_code, 302)
+
+    def test_safe_demo_creates_detailed_labelled_incident_without_attack_traffic(self):
+        self.authenticate()
+        response = self.client.post(
+            "/api/demo-incident", headers={"X-CSRF-Token": "test-token"}
+        )
+        self.assertEqual(response.status_code, 201)
+        payload = response.get_json()
+        self.assertTrue(payload["incident"]["simulated"])
+        self.assertEqual(payload["incident"]["classification"], "DDoS")
+        self.assertEqual(payload["incident"]["destination_port"], "443")
+        self.assertIn("no attack traffic was sent", payload["message"].lower())
+
+        with patch("application.azure_store.configured", return_value=False):
+            detail = self.client.get(
+                f"/incident-detail?incident_id={payload['incident']['incident_id']}"
+            )
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn(b"SIMULATED DEMO - NOT A REAL ATTACK", detail.data)
+        self.assertIn(b"Network Denial of Service", detail.data)
+        self.assertIn(b"Recommended actions", detail.data)
 
     def test_authorized_lab_alert_records_tester_ip(self):
         with patch.object(application, "settings", replace(application.settings, lab_alert_token="test-lab-token")):

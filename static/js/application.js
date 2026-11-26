@@ -621,17 +621,18 @@ if (auth) {
             const status = String(incident.status || "new").toLowerCase();
             const incidentId = String(incident.incident_id || "");
             const classification = String(incident.classification || "Unknown");
-            const isAuthorizedTest = classification === "Authorized Lab Alert" || String(incident.latest_flow_id || "") === "authorized-lab";
+            const isSimulated = incident.simulated === true;
+            const isAuthorizedTest = isSimulated || classification === "Authorized Lab Alert" || String(incident.latest_flow_id || "") === "authorized-lab";
             const confidence = probabilityPercent(incident.max_attack_probability);
             const inferenceLabel = isAuthorizedTest
-                ? "Authorized notification test — not AI inference"
+                ? "Simulated demo score — not AI inference"
                 : (confidence === null ? "Not available" : `${confidence.toFixed(1)}% attack probability`);
             const acknowledge = status === "new"
                 ? `<button type="button" class="btn btn-default btn-sm acknowledge-incident" data-incident-id="${escapedFlowValue(incidentId)}">Acknowledge</button>`
                 : '<span class="incident-meta">Acknowledged</span>';
             const details = `<a href="/incident-detail?incident_id=${encodeURIComponent(incidentId)}" class="btn btn-primary btn-sm">Details</a>`;
             return `<article class="incident-item" data-incident-id="${escapedFlowValue(incidentId)}" data-risk="${escapedFlowValue(risk)}" data-status="${escapedFlowValue(status)}">
-                <div><span class="incident-field-label">Detected attack type</span><strong class="incident-attack-type">${escapedFlowValue(classification)}</strong><div class="incident-meta">${escapedFlowValue(risk.replaceAll("_", " "))} risk · ${escapedFlowValue(incident.event_count || 1)} event(s)</div></div>
+                <div>${isSimulated ? '<span class="label label-warning">SIMULATED DEMO - NOT A REAL ATTACK</span>' : ''}<span class="incident-field-label">Detected attack type</span><strong class="incident-attack-type">${escapedFlowValue(classification)}</strong><div class="incident-meta">${escapedFlowValue(risk.replaceAll("_", " "))} risk · ${escapedFlowValue(incident.event_count || 1)} event(s)</div></div>
                 <div class="incident-evidence-grid">
                     <div><span class="incident-field-label">Observed source / possible attacker</span><strong>${escapedFlowValue(incident.source_ip || "Unknown")}</strong></div>
                     <div><span class="incident-field-label">Target computer</span><strong>${escapedFlowValue(incident.destination_ip || "Unknown")}:${escapedFlowValue(incident.destination_port || "unknown")}</strong></div>
@@ -652,6 +653,25 @@ if (auth) {
             .then((payload) => renderIncidents(payload.items, payload.summary))
             .catch((error) => console.warn("Incident refresh unavailable:", error));
     }
+
+    $(document).on('click', '#run-safe-demo', function () {
+        if (!window.confirm('Create a clearly labelled simulated DDoS incident? No attack traffic will be sent.')) return;
+        const button = this;
+        button.disabled = true;
+        fetch('/api/demo-incident', {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || ''
+            }
+        }).then((response) => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
+          .then((payload) => {
+              toastr.success(payload.message || 'Safe demo incident created.');
+              refreshIncidents();
+          })
+          .catch(() => toastr.error('Could not create the safe demo incident.'))
+          .finally(() => { button.disabled = false; });
+    });
 
     $(document).on('click', '.acknowledge-incident', function () {
         const incidentId = $(this).data('incident-id');

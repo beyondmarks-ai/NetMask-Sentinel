@@ -104,6 +104,7 @@ def save_incident(incident: dict[str, Any]) -> None:
         "associated_process": str(incident.get("associated_process", "Not resolved")),
         "associated_pid": str(incident.get("associated_pid", "")),
         "component_type": str(incident.get("component_type", "Network endpoint/service")),
+        "simulated": bool(incident.get("simulated", False)),
     }
     _table("netmaskincidents").upsert_entity(entity)
 
@@ -128,6 +129,7 @@ def _incident_payload(entity: dict[str, Any]) -> dict[str, Any]:
         "associated_process": entity.get("associated_process", "Not resolved"),
         "associated_pid": entity.get("associated_pid", ""),
         "component_type": entity.get("component_type", "Network endpoint/service"),
+        "simulated": bool(entity.get("simulated", False)),
     }
 
 

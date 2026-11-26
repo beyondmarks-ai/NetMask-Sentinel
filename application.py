@@ -317,6 +317,50 @@ COMMON_TARGET_SERVICES = {
     "5000": "Application web service", "5432": "PostgreSQL database",
     "8080": "Application web service",
 }
+ATTACK_GUIDANCE = {
+    "ddos": {
+        "behavior": "A distributed denial-of-service pattern attempts to overwhelm the target with traffic from multiple sources.",
+        "impact": "The target service may become slow or unavailable to legitimate users.",
+        "technique": "Network Denial of Service (MITRE ATT&CK T1498)",
+        "actions": ["Rate-limit traffic", "Review firewall and load-balancer logs", "Block confirmed malicious sources", "Contact the hosting or ISP DDoS protection team"],
+    },
+    "dos": {
+        "behavior": "A denial-of-service pattern attempts to exhaust a service or network resource.",
+        "impact": "The affected application or service may become slow or unavailable.",
+        "technique": "Endpoint Denial of Service (MITRE ATT&CK T1499)",
+        "actions": ["Rate-limit the target service", "Inspect the source and destination ports", "Block confirmed malicious traffic", "Monitor CPU, memory, and connection queues"],
+    },
+    "probe": {
+        "behavior": "A probing pattern searches for reachable hosts, ports, or services.",
+        "impact": "The activity may identify services for a later attack.",
+        "technique": "Network Service Discovery (MITRE ATT&CK T1046)",
+        "actions": ["Review exposed ports", "Restrict unnecessary services", "Block repeated scanning sources", "Check for follow-on login attempts"],
+    },
+    "botnet": {
+        "behavior": "Traffic resembles automated command, control, or coordinated bot activity.",
+        "impact": "An endpoint may be communicating with malicious infrastructure.",
+        "technique": "Application Layer Protocol (MITRE ATT&CK T1071)",
+        "actions": ["Isolate the associated endpoint", "Review process and DNS activity", "Run endpoint malware scanning", "Block confirmed command-and-control destinations"],
+    },
+    "web attack": {
+        "behavior": "Traffic resembles an attempt to exploit a web-facing application or service.",
+        "impact": "Application data, authentication, or availability may be at risk.",
+        "technique": "Exploit Public-Facing Application (MITRE ATT&CK T1190)",
+        "actions": ["Review web server logs", "Enable or inspect WAF rules", "Patch the affected application", "Check for suspicious sessions and file changes"],
+    },
+    "ftp-patator": {
+        "behavior": "Repeated FTP authentication traffic resembles a password-guessing attempt.",
+        "impact": "A weak FTP account could be accessed without authorization.",
+        "technique": "Brute Force (MITRE ATT&CK T1110)",
+        "actions": ["Disable unused FTP access", "Lock or reset targeted accounts", "Enforce strong authentication", "Block repeated failed-login sources"],
+    },
+    "ssh-patator": {
+        "behavior": "Repeated SSH authentication traffic resembles a password-guessing attempt.",
+        "impact": "A weak SSH account could be accessed without authorization.",
+        "technique": "Brute Force (MITRE ATT&CK T1110)",
+        "actions": ["Disable password SSH where possible", "Use key-based authentication", "Review authentication logs", "Block repeated failed-login sources"],
+    },
+}
 
 
 def describe_target(metadata: dict[str, object]) -> dict[str, str]:
@@ -339,6 +383,19 @@ def describe_target(metadata: dict[str, object]) -> dict[str, str]:
         "associated_process": process_name,
         "associated_pid": process_pid,
         "component_type": component_type,
+    }
+
+
+def describe_attack(classification: str) -> dict[str, object]:
+    normalized = classification.strip().lower().replace(" (simulated)", "")
+    guidance = ATTACK_GUIDANCE.get(normalized)
+    if guidance:
+        return guidance
+    return {
+        "behavior": "The model detected traffic that differs from the expected benign network pattern.",
+        "impact": "Review the endpoint and application evidence to determine whether the activity succeeded.",
+        "technique": "Requires analyst validation",
+        "actions": ["Validate the source and destination", "Review host and application logs", "Preserve relevant evidence", "Monitor for repeated activity"],
     }
 
 
@@ -580,6 +637,53 @@ def acknowledge_incident(incident_id):
     return jsonify({"success": True, "incident": incident})
 
 
+@app.post('/api/demo-incident')
+def create_demo_incident():
+    """Create transparent demo evidence without generating attack traffic."""
+    if not session.get('logged_in'):
+        return jsonify({"error": "authentication_required"}), 401
+
+    incident = incident_manager.record(
+        classification="DDoS",
+        source_ip="198.51.100.25",
+        destination_ip="192.0.2.10",
+        protocol="TCP",
+        risk_level="very_high",
+        attack_probability=0.97,
+        flow_id="safe-demo",
+        destination_port="443",
+        target_service="HTTPS web application",
+        associated_process="demo-web-app.exe",
+        associated_pid="4242",
+        component_type="Application process",
+        simulated=True,
+    )
+    incident_payload = {**incident.to_dict(), "sensor_id": "safe-demo-sensor"}
+    azure_store.save_incident(incident_payload)
+    runtime_metrics.increment("simulated_alerts_total")
+    socketio.emit(
+        "newresult",
+        {
+            "result": [
+                incident.incident_id, "198.51.100.25", "53120", "192.0.2.10", "443",
+                "TCP", incident_payload["first_seen"], incident_payload["last_seen"],
+                "demo-web-app.exe", "4242", "DDoS", 0.97, "Very High",
+            ],
+            "ips": [{"SourceIP": "198.51.100.25", "count": incident.event_count}],
+            "risk_level": "very_high",
+            "classification": "DDoS",
+            "simulated": True,
+            "incident": incident_payload,
+        },
+        namespace="/test",
+    )
+    return jsonify({
+        "success": True,
+        "message": "Safe simulated DDoS incident created; no attack traffic was sent.",
+        "incident": incident_payload,
+    }), 201
+
+
 @app.get('/incident-detail')
 def incident_detail():
     """Show the evidence available for local and remotely reported incidents."""
@@ -607,6 +711,7 @@ def incident_detail():
     return render_template(
         'incident_detail.html',
         incident=incident,
+        attack_guidance=describe_attack(str(incident.get("classification", "Unknown"))),
         model=detection_engine.metadata(),
         full_flow_id=full_flow_id,
     )
@@ -642,6 +747,7 @@ def ingest_sensor_event():
         associated_process = str(payload.get("associated_process", "Not resolved"))[:128]
         associated_pid = str(payload.get("associated_pid", ""))[:32]
         component_type = str(payload.get("component_type", "Network endpoint/service"))[:64]
+        simulated = payload.get("simulated") is True
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "invalid_sensor_event"}), 400
 
@@ -658,6 +764,7 @@ def ingest_sensor_event():
         associated_process=associated_process,
         associated_pid=associated_pid,
         component_type=component_type,
+        simulated=simulated,
     )
     incident_payload = {**incident.to_dict(), "sensor_id": sensor_id}
     azure_store.save_incident(incident_payload)
@@ -1119,6 +1226,7 @@ def debug_mock_flow():
         risk_level="high",
         attack_probability=0.93,
         flow_id="simulation",
+        simulated=True,
     )
     runtime_metrics.increment("simulated_alerts_total")
     mock_result = [
@@ -1164,6 +1272,7 @@ def authorized_lab_alert():
         risk_level="high",
         attack_probability=1.0,
         flow_id="authorized-lab",
+        simulated=True,
     )
     cloud_reporter.report(incident.to_dict(), {
         "classification": "Authorized Lab Alert",

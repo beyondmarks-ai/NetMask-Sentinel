@@ -271,6 +271,19 @@ az group delete --name $deployment.resource_group --yes
 
 ## Test on the same computer
 
+### Safe presentation demo (local and hosted dashboards)
+
+After signing in, click **Run Safe Demo Attack** in the **Detected Attack
+Traffic** section. Confirm the prompt to create a detailed simulated DDoS
+incident. The demo includes source and target IPs, port/service, associated
+process, timeline, scenario score, MITRE ATT&CK context, possible impact, and
+recommended response actions.
+
+The dashboard and detail page permanently label this record **SIMULATED DEMO -
+NOT A REAL ATTACK**. It generates no attack packets and the scenario score is
+not presented as model inference. Use actual sensor-captured incidents when
+demonstrating the AI model's real output.
+
 Start NetMask, then double-click `Run Remote Lab Test.cmd` and use:
 
 ```text
@@ -346,6 +359,7 @@ Only replay packet captures that you own or are explicitly authorized to analyze
 | `GET /api/metrics` | Yes | Runtime, queue, capture, latency, and error counters. |
 | `GET /api/incidents` | Yes | Correlated incident list and summary. |
 | `POST /api/incidents/{id}/acknowledge` | Yes + CSRF | Acknowledges an incident. |
+| `POST /api/demo-incident` | Yes + CSRF | Creates a clearly labelled safe demo incident without attack traffic. |
 | `POST /api/lab-alert` | Private network + token | Development-only authorized notification test. |
 
 Runtime evidence is written under `runtime/`, which is intentionally excluded from Git.
