@@ -631,7 +631,7 @@ if (auth) {
                 : '<span class="incident-meta">Acknowledged</span>';
             const details = `<a href="/incident-detail?incident_id=${encodeURIComponent(incidentId)}" class="btn btn-primary btn-sm">Details</a>`;
             return `<article class="incident-item" data-incident-id="${escapedFlowValue(incidentId)}" data-risk="${escapedFlowValue(risk)}" data-status="${escapedFlowValue(status)}">
-                <div><span class="incident-field-label">Attack type</span><strong class="incident-attack-type">${escapedFlowValue(classification)}</strong><div class="incident-meta">${escapedFlowValue(risk.replaceAll("_", " "))} risk · ${escapedFlowValue(incident.event_count || 1)} event(s)</div></div>
+                <div><span class="incident-field-label">Detected attack type</span><strong class="incident-attack-type">${escapedFlowValue(classification)}</strong><div class="incident-meta">${escapedFlowValue(risk.replaceAll("_", " "))} risk · ${escapedFlowValue(incident.event_count || 1)} event(s)</div></div>
                 <div class="incident-evidence-grid">
                     <div><span class="incident-field-label">Observed source / possible attacker</span><strong>${escapedFlowValue(incident.source_ip || "Unknown")}</strong></div>
                     <div><span class="incident-field-label">Target computer</span><strong>${escapedFlowValue(incident.destination_ip || "Unknown")}</strong></div>
@@ -672,7 +672,7 @@ if (auth) {
             <tr>
                 <th>Flow ID</th><th>Src IP</th><th>Src Port</th><th>Dst IP</th>
                 <th>Dst Port</th><th>Protocol</th><th>Flow Start</th><th>Flow End</th>
-                <th>App Name</th><th>PID</th><th>Prediction</th><th>Prob</th>
+                <th>App Name</th><th>PID</th><th>Attack Type</th><th>Prob</th>
                 <th>Risk</th><th>Details</th>
             </tr>`;
 

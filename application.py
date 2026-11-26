@@ -928,6 +928,8 @@ def detail():
             exp=exp.as_html() if exp else None,
             ae_plot=plot_div,
             risk=risk,
+            attack_type=detection.classification,
+            attack_probability=detection.attack_probability * 100,
             explanation_error=explanation_error,
         )
     except Exception as e:

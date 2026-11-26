@@ -187,6 +187,9 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"10.0.0.7", response.data)
         self.assertIn(b"10.0.0.8", response.data)
+        self.assertIn(b"Detected Attack Type:", response.data)
+        self.assertIn(b"Benign", response.data)
+        self.assertIn(b"overall attack probability", response.data)
         self.assertIn(b"Optional model explanation is unavailable", response.data)
 
     def test_high_risk_incident_detail_shows_attack_and_ip_evidence(self):
@@ -200,6 +203,7 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"High risk", response.data)
         self.assertIn(b"DoS", response.data)
+        self.assertIn(b"Detected attack type", response.data)
         self.assertIn(b"203.0.113.70", response.data)
         self.assertIn(b"10.0.0.8", response.data)
         self.assertIn(b"94.0%", response.data)

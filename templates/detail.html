@@ -58,15 +58,17 @@
             </div>
         </div>
         
-        <!-- Risk Level -->
+        <!-- AI detection summary -->
         <div class="row">
             <div class="col-md-12">
                 <div class="card mb-4">
                     <div class="card-header">
-                        <h3 class="card-title">Risk Assessment</h3>
+                        <h3 class="card-title">AI Attack Classification</h3>
                     </div>
                     <div class="card-body text-center">
+                        <h2>Detected Attack Type: <strong>{{ attack_type }}</strong></h2>
                         <p class="risk-badge risk-{{ risk|lower|replace(' ', '_') }}">{{ risk }} risk</p>
+                        <p><strong>{{ '%.1f%%'|format(attack_probability) }}</strong> overall attack probability</p>
                     </div>
                 </div>
             </div>
