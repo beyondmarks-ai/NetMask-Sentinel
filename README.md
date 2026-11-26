@@ -8,6 +8,16 @@ Professional flow-based network intrusion detection and monitoring for authorize
 
 NetMask Sentinel captures IPv4 TCP and UDP traffic, groups packets into bidirectional flows, extracts a canonical 39-feature vector, and classifies each completed flow with the bundled random-forest model. Results are streamed to a local dashboard, assigned an explicit risk level, correlated into incidents, and recorded as local audit evidence.
 
+### AI model used
+
+The primary detector is a bundled scikit-learn `RandomForestClassifier` loaded
+from `models/model.pkl`; it is not an external AI API. It evaluates 39
+flow-level numerical features and returns one of eight classes: Benign, Botnet,
+DDoS, DoS, FTP-Patator, Probe, SSH-Patator, or Web Attack. The dashboard shows
+the predicted attack type, observed source IP, target IP, protocol, and model
+probability. Optional TensorFlow autoencoder and LIME assets are used only for
+local explanation views.
+
 This repository is intended for defensive monitoring, education, model evaluation, and authorized lab testing. It does not exploit systems, block traffic, prove attacker intent, or replace a professionally managed SIEM and incident-response program.
 
 ## Features

@@ -50,7 +50,7 @@ class RouteTests(unittest.TestCase):
     def test_guest_access_opens_dashboard_in_development(self):
         response = self.client.get("/guest", follow_redirects=True)
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Recent Incidents", response.data)
+        self.assertIn(b"Detected Attack Traffic", response.data)
 
     def test_landing_only_offers_login_and_signup(self):
         response = self.client.get("/")
@@ -58,6 +58,8 @@ class RouteTests(unittest.TestCase):
         self.assertIn(b'id="heroLoginBtn"', response.data)
         self.assertIn(b'id="heroSignupBtn"', response.data)
         self.assertNotIn(b"Skip - View Dashboard", response.data)
+        self.assertNotIn(b"Network Defense", response.data)
+        self.assertIn(b"Network Attack Detection", response.data)
 
     def test_local_signup_and_login_work_without_firebase(self):
         self.client.get("/signup")
@@ -137,9 +139,16 @@ class RouteTests(unittest.TestCase):
             b'id="high-risk-flows"',
             b'id="myChart"',
             b'id="riskChart"',
+            b'id="model-type"',
+            b'id="model-classes"',
+            b'id="traffic-filter"',
         ):
             self.assertIn(element_id, dashboard.data)
         self.assertIn("refreshDashboardAnalytics()", javascript)
+        self.assertIn("refreshModelInfo()", javascript)
+        self.assertIn("Target computer", javascript)
+        self.assertIn("Attacks / Suspicious Only", dashboard.data.decode())
+        self.assertIn('$("#risk-filter, #traffic-filter")', javascript)
         self.assertIn("incident.max_attack_probability", javascript)
         self.assertNotIn("share-incident", javascript)
         self.assertNotIn("copy-report-link", javascript)

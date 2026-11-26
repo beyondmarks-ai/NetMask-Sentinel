@@ -31,6 +31,12 @@ class DetectionTests(unittest.TestCase):
         self.assertEqual(result.risk_level, "minimal")
         self.assertFalse(result.should_alert)
 
+    def test_metadata_names_the_ai_framework_and_algorithm(self):
+        metadata = DetectionEngine(FakeClassifier()).metadata()
+        self.assertEqual(metadata["framework"], "scikit-learn")
+        self.assertEqual(metadata["model_type"], "FakeClassifier")
+        self.assertEqual(metadata["feature_count"], FEATURE_COUNT)
+
     def test_feature_contract_rejects_wrong_size_and_non_finite(self):
         with self.assertRaises(FeatureValidationError):
             validate_feature_vector([0] * (FEATURE_COUNT - 1))

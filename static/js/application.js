@@ -387,6 +387,22 @@ if (auth) {
 
     refreshDashboardAnalytics();
 
+    function refreshModelInfo() {
+        fetch('/api/model', {headers: {'Accept': 'application/json'}})
+            .then((response) => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
+            .then((model) => {
+                const attackClasses = (model.classes || []).filter((name) => String(name).toLowerCase() !== 'benign');
+                $('#model-framework').text(model.framework || 'scikit-learn');
+                $('#model-type').text(model.model_type || 'RandomForestClassifier');
+                $('#model-features').text(`${model.feature_count || 39} flow features`);
+                $('#model-classes').text(attackClasses.join(', ') || 'Model classes unavailable');
+                $('#model-status').text(`Loaded · ${model.model_version || 'model ready'}`);
+            })
+            .catch(() => $('#model-status').text('Bundled model ready'));
+    }
+
+    refreshModelInfo();
+
     // Setup real-time stats listener with enhanced error handling
     function setupGlobalStatsListener() {
         db.collection("global_stats").doc("realtime")
@@ -603,15 +619,24 @@ if (auth) {
         list.innerHTML = items.slice(0, 10).map((incident) => {
             const risk = String(incident.risk_level || "medium").toLowerCase();
             const status = String(incident.status || "new").toLowerCase();
-            const route = `${incident.source_ip || "?"} → ${incident.destination_ip || "?"}`;
             const incidentId = String(incident.incident_id || "");
+            const classification = String(incident.classification || "Unknown");
+            const isAuthorizedTest = classification === "Authorized Lab Alert" || String(incident.latest_flow_id || "") === "authorized-lab";
+            const confidence = probabilityPercent(incident.max_attack_probability);
+            const inferenceLabel = isAuthorizedTest
+                ? "Authorized notification test — not AI inference"
+                : (confidence === null ? "Not available" : `${confidence.toFixed(1)}% attack probability`);
             const acknowledge = status === "new"
                 ? `<button type="button" class="btn btn-default btn-sm acknowledge-incident" data-incident-id="${escapedFlowValue(incidentId)}">Acknowledge</button>`
                 : '<span class="incident-meta">Acknowledged</span>';
             return `<article class="incident-item" data-incident-id="${escapedFlowValue(incidentId)}" data-risk="${escapedFlowValue(risk)}" data-status="${escapedFlowValue(status)}">
-                <div><div class="incident-id">${escapedFlowValue(incident.incident_id)}</div><div class="incident-meta">${escapedFlowValue(risk.replaceAll("_", " "))}</div></div>
-                <div><strong>${escapedFlowValue(incident.classification)}</strong><div class="incident-meta">${escapedFlowValue(route)} · ${escapedFlowValue(incident.protocol)}</div></div>
-                <span>${escapedFlowValue(incident.event_count || 1)} event(s)</span>
+                <div><span class="incident-field-label">Attack type</span><strong class="incident-attack-type">${escapedFlowValue(classification)}</strong><div class="incident-meta">${escapedFlowValue(risk.replaceAll("_", " "))} risk · ${escapedFlowValue(incident.event_count || 1)} event(s)</div></div>
+                <div class="incident-evidence-grid">
+                    <div><span class="incident-field-label">Observed source / possible attacker</span><strong>${escapedFlowValue(incident.source_ip || "Unknown")}</strong></div>
+                    <div><span class="incident-field-label">Target computer</span><strong>${escapedFlowValue(incident.destination_ip || "Unknown")}</strong></div>
+                    <div><span class="incident-field-label">Network protocol</span><strong>${escapedFlowValue(incident.protocol || "Unknown")}</strong></div>
+                    <div><span class="incident-field-label">AI result</span><strong>${escapedFlowValue(inferenceLabel)}</strong></div>
+                </div>
                 <div>${acknowledge}</div>
             </article>`;
         }).join("");
@@ -675,7 +700,7 @@ if (auth) {
             paginationHtml += `<li class="page-item${p === currentPage ? ' active' : ''}"><a class="page-link" href="#" data-page="${p}">${p}</a></li>`;
         }
         $('#pagination').html(paginationHtml);
-        updateFilteredCount();
+        applyTableFilters();
     }
 
     refreshIncidents();
@@ -822,34 +847,32 @@ $(document).on('click', '#logout-button', function(e) {
         }
     }
 
-    // Improved Risk filter handling
-    $("#risk-filter").on("change", function() {
-        const selectedRisk = $(this).val().toLowerCase();
-        
-        // Show all rows first (including header)
-        $("#details tr").show();
-        
-        if (selectedRisk !== "all") {
-            // Hide non-matching rows (skip header row)
-            $("#details tr:not(:first-child)").each(function() {
-                const riskCell = $(this).find("td:nth-child(13)").text().toLowerCase();
-                const normalizedRisk = selectedRisk.replace("_", " ");
-                
-                if (!riskCell.includes(normalizedRisk)) {
-                    $(this).hide();
-                }
-            });
-        }
-        
-        // Update count of visible rows
+    function applyTableFilters() {
+        const selectedRisk = $("#risk-filter").val().toLowerCase();
+        const trafficFilter = $("#traffic-filter").val().toLowerCase();
+        const normalizedRisk = selectedRisk.replace("_", " ");
+        $("#details tr:first-child").show();
+        $("#details tr:not(:first-child)").each(function() {
+            const riskCell = $(this).find("td:nth-child(13)").text().trim().toLowerCase();
+            const prediction = $(this).find("td:nth-child(11)").text().trim().toLowerCase();
+            const riskMatches = selectedRisk === "all" || riskCell.includes(normalizedRisk);
+            const isBenign = prediction === "benign";
+            const trafficMatches = trafficFilter === "all"
+                || (trafficFilter === "benign" && isBenign)
+                || (trafficFilter === "suspicious" && !isBenign);
+            $(this).toggle(riskMatches && trafficMatches);
+        });
         updateFilteredCount();
-    });
+    }
+
+    $("#risk-filter, #traffic-filter").on("change", applyTableFilters);
 
     // Fixed download report function
   $("#download-report").on("click", function() {
     try {
         // Get the currently selected risk filter
         const selectedRisk = $("#risk-filter").val().toLowerCase();
+        const trafficFilter = $("#traffic-filter").val().toLowerCase();
         
         // Collect all data from messages_received (not just visible rows)
         let filteredData = messages_received;
@@ -860,6 +883,12 @@ $(document).on('click', '#logout-button', function(e) {
             filteredData = messages_received.filter(row => {
                 const riskCell = row[row.length - 1].toLowerCase();
                 return riskCell.includes(normalizedRisk);
+            });
+        }
+        if (trafficFilter !== "all") {
+            filteredData = filteredData.filter(row => {
+                const isBenign = String(row[10] || "").trim().toLowerCase() === "benign";
+                return trafficFilter === "benign" ? isBenign : !isBenign;
             });
         }
 
@@ -899,9 +928,7 @@ $(document).on('click', '#logout-button', function(e) {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         
         // Use filter level in filename
-        const filename = selectedRisk === "all" ? 
-            `netmask-full-report-${timestamp}.csv` :
-            `netmask-${selectedRisk}-risk-${timestamp}.csv`;
+        const filename = `netmask-${trafficFilter}-${selectedRisk}-risk-${timestamp}.csv`;
             
         link.setAttribute("href", url);
         link.setAttribute("download", filename);

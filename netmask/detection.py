@@ -157,6 +157,8 @@ class DetectionEngine:
             digest = hashlib.sha256(self.model_path.read_bytes()).hexdigest()
         return {
             "model_version": self.model_version,
+            "framework": "scikit-learn",
+            "model_type": type(self.classifier).__name__,
             "model_sha256": digest,
             "model_path": str(self.model_path) if self.model_path else None,
             "classes": list(self.classes),

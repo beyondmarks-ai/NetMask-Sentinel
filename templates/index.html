@@ -63,6 +63,22 @@
       <button type="button" id="enable-desktop-notifications" class="btn btn-primary btn-sm">Enable alerts</button>
     </section>
 
+    <section class="card model-summary-card" aria-labelledby="model-summary-heading">
+      <div class="card-header model-summary-header">
+        <div>
+          <h3 id="model-summary-heading" class="card-title">AI Detection Model</h3>
+          <p class="chart-subtitle">The classifier used to identify attack-like network flows.</p>
+        </div>
+        <span id="model-status" class="model-status">Loading model metadata...</span>
+      </div>
+      <div class="card-body model-summary-grid">
+        <div><span>AI framework</span><strong id="model-framework">scikit-learn</strong></div>
+        <div><span>Algorithm</span><strong id="model-type">Random Forest</strong></div>
+        <div><span>Input</span><strong id="model-features">39 flow features</strong></div>
+        <div class="model-class-list"><span>Detectable attack types</span><strong id="model-classes">Botnet, DDoS, DoS, FTP-Patator, Probe, SSH-Patator, Web Attack</strong></div>
+      </div>
+    </section>
+
     <section id="attack-alert" class="attack-alert" role="alert" aria-live="assertive" hidden>
       <div class="attack-alert-icon"><i class="fas fa-exclamation-triangle"></i></div>
       <div class="attack-alert-copy">
@@ -140,8 +156,8 @@
     <section class="card incident-card" aria-labelledby="incident-heading">
       <div class="card-header incident-header">
         <div>
-          <h3 id="incident-heading" class="card-title">Recent Incidents</h3>
-          <p class="chart-subtitle">Related detections are grouped to reduce alert fatigue.</p>
+          <h3 id="incident-heading" class="card-title">Detected Attack Traffic</h3>
+          <p class="chart-subtitle">Attack type, observed source, target computer, protocol, and AI confidence.</p>
         </div>
         <span id="incident-summary" class="incident-summary">0 open</span>
       </div>
@@ -160,9 +176,15 @@
             <div class="row">
               <div class="col-md-6">
                 <h3 class="card-title">Captured Flow</h3>
+                <p class="chart-subtitle">Defaults to attack/suspicious traffic. Select All Traffic to include normal flows.</p>
               </div>
               <div class="col-md-6 text-right">
                 <div class="filter-group">
+                  <select id="traffic-filter" class="form-control custom-filter" aria-label="Traffic classification filter">
+                    <option value="Suspicious" selected>Attacks / Suspicious Only</option>
+                    <option value="All">All Traffic</option>
+                    <option value="Benign">Normal / Benign Only</option>
+                  </select>
                   <select id="risk-filter" class="form-control custom-filter">
                     <option value="All">All Risks</option>
                     <option value="Minimal">Minimal Risk</option>
