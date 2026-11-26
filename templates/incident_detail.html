@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NetMask Sentinel - Attack Incident Details</title>
+  <link href="{{ url_for('static', filename='css/bootstrap.css') }}" rel="stylesheet">
+  <link href="{{ url_for('static', filename='css/main.css', v=asset_version) }}" rel="stylesheet">
+</head>
+<body>
+  <nav class="navbar navbar-default">
+    <div class="container-fluid">
+      <div class="navbar-header"><a class="navbar-brand" href="{{ url_for('capture') }}">NetMask Sentinel</a></div>
+      <ul class="nav navbar-nav navbar-right"><li><a href="{{ url_for('logout') }}">Logout</a></li></ul>
+    </div>
+  </nav>
+  <main class="container-fluid main-container">
+    <p><a href="{{ url_for('capture') }}" class="btn btn-primary">Back to Dashboard</a></p>
+    <div class="card mb-4">
+      <div class="card-header"><h3 class="card-title">Attack Incident Details</h3></div>
+      <div class="card-body">
+        <p class="risk-badge risk-{{ incident.risk_level|lower|replace(' ', '_') }}">{{ incident.risk_level|replace('_', ' ')|title }} risk</p>
+        <div class="alert alert-info">The source IP is observed network evidence. It identifies the traffic source seen by the sensor, but does not by itself prove a person's identity.</div>
+        <div class="table-responsive">
+          <table class="table table-bordered table-striped">
+            <tbody>
+              <tr><th>Incident ID</th><td>{{ incident.incident_id }}</td></tr>
+              <tr><th>Attack type</th><td><strong>{{ incident.classification }}</strong></td></tr>
+              <tr><th>Observed source / possible attacker IP</th><td><strong>{{ incident.source_ip }}</strong></td></tr>
+              <tr><th>Target computer IP</th><td><strong>{{ incident.destination_ip }}</strong></td></tr>
+              <tr><th>Network protocol</th><td>{{ incident.protocol }}</td></tr>
+              <tr><th>AI attack probability</th><td>{{ '%.1f%%'|format((incident.max_attack_probability|float) * 100) }}</td></tr>
+              <tr><th>Events correlated</th><td>{{ incident.event_count }}</td></tr>
+              <tr><th>First seen</th><td>{{ incident.first_seen }}</td></tr>
+              <tr><th>Last seen</th><td>{{ incident.last_seen }}</td></tr>
+              <tr><th>Sensor</th><td>{{ incident.sensor_id or 'Local sensor' }}</td></tr>
+              <tr><th>Status</th><td>{{ incident.status|title }}</td></tr>
+              <tr><th>AI model</th><td>{{ model.framework }} {{ model.model_type }} ({{ model.feature_count }} traffic features)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        {% if full_flow_id is not none %}
+          <a href="{{ url_for('detail', flow_id=full_flow_id) }}" class="btn btn-primary">Open Complete 39-Feature Analysis</a>
+        {% else %}
+          <p class="text-muted">This remotely reported incident contains attack evidence and IP details. Complete packet-derived feature data remains on the computer running the sensor.</p>
+        {% endif %}
+      </div>
+    </div>
+  </main>
+</body>
+</html>

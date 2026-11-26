@@ -111,6 +111,14 @@ class IncidentManager:
                 values = [incident for incident in values if incident.status == status]
             return [incident.to_dict() for incident in values[: max(0, limit)]]
 
+    def get(self, incident_id: str) -> dict[str, Any] | None:
+        """Return one incident without changing its status."""
+        with self._lock:
+            for incident in self._incidents:
+                if incident.incident_id == incident_id:
+                    return incident.to_dict()
+        return None
+
     def acknowledge(self, incident_id: str) -> dict[str, Any] | None:
         with self._lock:
             for incident in self._incidents:

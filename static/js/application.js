@@ -629,6 +629,7 @@ if (auth) {
             const acknowledge = status === "new"
                 ? `<button type="button" class="btn btn-default btn-sm acknowledge-incident" data-incident-id="${escapedFlowValue(incidentId)}">Acknowledge</button>`
                 : '<span class="incident-meta">Acknowledged</span>';
+            const details = `<a href="/incident-detail?incident_id=${encodeURIComponent(incidentId)}" class="btn btn-primary btn-sm">Details</a>`;
             return `<article class="incident-item" data-incident-id="${escapedFlowValue(incidentId)}" data-risk="${escapedFlowValue(risk)}" data-status="${escapedFlowValue(status)}">
                 <div><span class="incident-field-label">Attack type</span><strong class="incident-attack-type">${escapedFlowValue(classification)}</strong><div class="incident-meta">${escapedFlowValue(risk.replaceAll("_", " "))} risk · ${escapedFlowValue(incident.event_count || 1)} event(s)</div></div>
                 <div class="incident-evidence-grid">
@@ -637,7 +638,7 @@ if (auth) {
                     <div><span class="incident-field-label">Network protocol</span><strong>${escapedFlowValue(incident.protocol || "Unknown")}</strong></div>
                     <div><span class="incident-field-label">AI result</span><strong>${escapedFlowValue(inferenceLabel)}</strong></div>
                 </div>
-                <div>${acknowledge}</div>
+                <div>${details} ${acknowledge}</div>
             </article>`;
         }).join("");
     }
@@ -687,9 +688,12 @@ if (auth) {
                 }
             });
             const flowId = String(row[0]);
-            const details = /^\d+$/.test(flowId)
-                ? `<a href="/detail?flow_id=${encodeURIComponent(flowId)}" class="btn btn-sm btn-primary">Details</a>`
-                : '<span class="incident-meta">Simulation</span>';
+            let details = '<span class="incident-meta">No details</span>';
+            if (/^\d+$/.test(flowId)) {
+                details = `<a href="/detail?flow_id=${encodeURIComponent(flowId)}" class="btn btn-sm btn-primary">Details</a>`;
+            } else if (/^INC-[A-Za-z0-9-]+$/.test(flowId)) {
+                details = `<a href="/incident-detail?incident_id=${encodeURIComponent(flowId)}" class="btn btn-sm btn-primary">Details</a>`;
+            }
             messagesString += `<td>${details}</td></tr>`;
         });
         $('#details').html(messagesString);
@@ -767,14 +771,18 @@ $(document).on('click', '#logout-button', function(e) {
             if (messages_received.length >= 100) {
                 messages_received.shift();
             }
-            messages_received.push(msg.result);
+            const receivedRow = Array.isArray(msg.result) ? [...msg.result] : msg.result;
+            if (Array.isArray(receivedRow) && msg.incident && msg.incident.incident_id && !/^\d+$/.test(String(receivedRow[0]))) {
+                receivedRow[0] = String(msg.incident.incident_id);
+            }
+            messages_received.push(receivedRow);
             updateTable(currentPage);
             
             // Save to localStorage for persistence across refreshes
             saveFlowsToLocal();
 
             // Check risk level and notify
-            checkRiskLevel(msg.risk_level, msg.result);
+            checkRiskLevel(msg.risk_level, receivedRow);
             if (msg.incident) refreshIncidents();
 
             // Update chart based on all captured rows for stable visualization.

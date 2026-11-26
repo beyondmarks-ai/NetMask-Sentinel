@@ -539,6 +539,38 @@ def acknowledge_incident(incident_id):
     return jsonify({"success": True, "incident": incident})
 
 
+@app.get('/incident-detail')
+def incident_detail():
+    """Show the evidence available for local and remotely reported incidents."""
+    if not session.get('logged_in'):
+        return redirect(url_for('landing'))
+
+    incident_id = str(request.args.get('incident_id', '')).strip()[:128]
+    if not incident_id:
+        return "Incident not found", 404
+
+    incident = azure_store.get_incident(incident_id) if azure_store.configured() else None
+    if not incident:
+        incident = incident_manager.get(incident_id)
+    if not incident:
+        return "Incident not found", 404
+
+    full_flow_id = None
+    raw_flow_id = str(incident.get("latest_flow_id") or "")
+    if raw_flow_id.isdigit():
+        candidate = int(raw_flow_id)
+        with flow_state_lock:
+            if not flow_df.loc[flow_df['FlowID'] == candidate].empty:
+                full_flow_id = candidate
+
+    return render_template(
+        'incident_detail.html',
+        incident=incident,
+        model=detection_engine.metadata(),
+        full_flow_id=full_flow_id,
+    )
+
+
 @app.get('/share/<token>')
 def shared_incident(token):
     incident = azure_store.resolve_share(token)
@@ -580,7 +612,7 @@ def ingest_sensor_event():
     azure_store.save_incident(incident_payload)
     runtime_metrics.increment("cloud_sensor_events_total")
     row = [
-        "remote", source_ip, "", destination_ip, "", protocol,
+        incident.incident_id, source_ip, "", destination_ip, "", protocol,
         incident_payload["first_seen"], incident_payload["last_seen"], sensor_id, "",
         classification, probability, risk_level.replace("_", " ").title(),
     ]

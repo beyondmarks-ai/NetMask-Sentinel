@@ -189,6 +189,25 @@ class RouteTests(unittest.TestCase):
         self.assertIn(b"10.0.0.8", response.data)
         self.assertIn(b"Optional model explanation is unavailable", response.data)
 
+    def test_high_risk_incident_detail_shows_attack_and_ip_evidence(self):
+        self.authenticate()
+        incident = application.incident_manager.record(
+            classification="DoS", source_ip="203.0.113.70", destination_ip="10.0.0.8",
+            protocol="TCP", risk_level="high", attack_probability=0.94, flow_id="remote"
+        )
+        with patch("application.azure_store.configured", return_value=False):
+            response = self.client.get(f"/incident-detail?incident_id={incident.incident_id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"High risk", response.data)
+        self.assertIn(b"DoS", response.data)
+        self.assertIn(b"203.0.113.70", response.data)
+        self.assertIn(b"10.0.0.8", response.data)
+        self.assertIn(b"94.0%", response.data)
+
+    def test_incident_detail_requires_login(self):
+        response = self.client.get("/incident-detail?incident_id=INC-test")
+        self.assertEqual(response.status_code, 302)
+
     def test_authorized_lab_alert_records_tester_ip(self):
         with patch.object(application, "settings", replace(application.settings, lab_alert_token="test-lab-token")):
             response = self.client.post(
