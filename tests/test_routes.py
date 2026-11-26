@@ -190,13 +190,18 @@ class RouteTests(unittest.TestCase):
         self.assertIn(b"Detected Attack Type:", response.data)
         self.assertIn(b"Benign", response.data)
         self.assertIn(b"overall attack probability", response.data)
+        self.assertIn(b"Observed target context", response.data)
+        self.assertIn(b"Application process", response.data)
+        self.assertIn(b"test.exe", response.data)
         self.assertIn(b"Optional model explanation is unavailable", response.data)
 
     def test_high_risk_incident_detail_shows_attack_and_ip_evidence(self):
         self.authenticate()
         incident = application.incident_manager.record(
             classification="DoS", source_ip="203.0.113.70", destination_ip="10.0.0.8",
-            protocol="TCP", risk_level="high", attack_probability=0.94, flow_id="remote"
+            protocol="TCP", risk_level="high", attack_probability=0.94, flow_id="remote",
+            destination_port="443", target_service="HTTPS web application",
+            associated_process="nginx.exe", associated_pid="321", component_type="Application process"
         )
         with patch("application.azure_store.configured", return_value=False):
             response = self.client.get(f"/incident-detail?incident_id={incident.incident_id}")
@@ -207,6 +212,16 @@ class RouteTests(unittest.TestCase):
         self.assertIn(b"203.0.113.70", response.data)
         self.assertIn(b"10.0.0.8", response.data)
         self.assertIn(b"94.0%", response.data)
+        self.assertIn(b"HTTPS web application", response.data)
+        self.assertIn(b"nginx.exe", response.data)
+
+    def test_target_context_distinguishes_windows_system_and_application_processes(self):
+        windows = application.describe_target({"DestPort": 445, "PName": "svchost.exe", "PID": 100})
+        app = application.describe_target({"DestPort": 443, "PName": "chrome.exe", "PID": 200})
+        self.assertEqual(windows["component_type"], "Windows system process")
+        self.assertEqual(windows["target_service"], "Windows SMB/file-sharing service")
+        self.assertEqual(app["component_type"], "Application process")
+        self.assertEqual(app["target_service"], "HTTPS web application")
 
     def test_incident_detail_requires_login(self):
         response = self.client.get("/incident-detail?incident_id=INC-test")
@@ -235,6 +250,11 @@ class RouteTests(unittest.TestCase):
             "max_attack_probability": 0.91,
             "sensor_id": "branch-office-1",
             "latest_flow_id": "42",
+            "destination_port": "443",
+            "target_service": "HTTPS web application",
+            "associated_process": "browser.exe",
+            "associated_pid": "55",
+            "component_type": "Application process",
         }
         hosted_settings = replace(application.settings, sensor_ingest_token="x" * 48)
         with patch.object(application, "settings", hosted_settings), patch("application.azure_store.save_incident") as save:
@@ -250,6 +270,9 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(saved["source_ip"], "203.0.113.44")
         self.assertEqual(saved["destination_ip"], "10.0.0.12")
         self.assertEqual(saved["sensor_id"], "branch-office-1")
+        self.assertEqual(saved["destination_port"], "443")
+        self.assertEqual(saved["target_service"], "HTTPS web application")
+        self.assertEqual(saved["associated_process"], "browser.exe")
 
     def test_new_share_creation_endpoints_are_removed(self):
         self.authenticate()

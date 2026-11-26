@@ -634,7 +634,10 @@ if (auth) {
                 <div><span class="incident-field-label">Detected attack type</span><strong class="incident-attack-type">${escapedFlowValue(classification)}</strong><div class="incident-meta">${escapedFlowValue(risk.replaceAll("_", " "))} risk · ${escapedFlowValue(incident.event_count || 1)} event(s)</div></div>
                 <div class="incident-evidence-grid">
                     <div><span class="incident-field-label">Observed source / possible attacker</span><strong>${escapedFlowValue(incident.source_ip || "Unknown")}</strong></div>
-                    <div><span class="incident-field-label">Target computer</span><strong>${escapedFlowValue(incident.destination_ip || "Unknown")}</strong></div>
+                    <div><span class="incident-field-label">Target computer</span><strong>${escapedFlowValue(incident.destination_ip || "Unknown")}:${escapedFlowValue(incident.destination_port || "unknown")}</strong></div>
+                    <div><span class="incident-field-label">Target service</span><strong>${escapedFlowValue(incident.target_service || "Unknown network service")}</strong></div>
+                    <div><span class="incident-field-label">Observed component</span><strong>${escapedFlowValue(incident.component_type || "Network endpoint/service")}</strong></div>
+                    <div><span class="incident-field-label">Associated Windows process</span><strong>${escapedFlowValue(incident.associated_process || "Not resolved")}${incident.associated_pid ? ` (PID ${escapedFlowValue(incident.associated_pid)})` : ""}</strong></div>
                     <div><span class="incident-field-label">Network protocol</span><strong>${escapedFlowValue(incident.protocol || "Unknown")}</strong></div>
                     <div><span class="incident-field-label">AI result</span><strong>${escapedFlowValue(inferenceLabel)}</strong></div>
                 </div>

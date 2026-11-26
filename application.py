@@ -303,6 +303,45 @@ def _firestore_safe(value):
     return value
 
 
+WINDOWS_SYSTEM_PROCESSES = {
+    "system", "svchost.exe", "services.exe", "lsass.exe", "wininit.exe",
+    "winlogon.exe", "csrss.exe", "smss.exe", "dwm.exe", "spoolsv.exe",
+}
+COMMON_TARGET_SERVICES = {
+    "21": "FTP service", "22": "SSH service", "25": "Mail service",
+    "53": "DNS service", "80": "HTTP web application", "110": "POP3 mail service",
+    "135": "Windows RPC service", "139": "Windows NetBIOS service",
+    "143": "IMAP mail service", "443": "HTTPS web application",
+    "445": "Windows SMB/file-sharing service", "1433": "Microsoft SQL Server",
+    "3306": "MySQL database", "3389": "Windows Remote Desktop service",
+    "5000": "Application web service", "5432": "PostgreSQL database",
+    "8080": "Application web service",
+}
+
+
+def describe_target(metadata: dict[str, object]) -> dict[str, str]:
+    """Describe observable endpoint/process context without claiming compromise."""
+    destination_port = str(metadata.get("DestPort") or "unknown")
+    process_name = str(metadata.get("PName") or "").strip()
+    process_pid = str(metadata.get("PID") or "").strip()
+    unresolved = not process_name or process_name.lower() in {"not found", "none", "unknown"}
+    if unresolved:
+        process_name = "Not resolved"
+        process_pid = ""
+        component_type = "Network endpoint/service"
+    elif process_name.lower() in WINDOWS_SYSTEM_PROCESSES:
+        component_type = "Windows system process"
+    else:
+        component_type = "Application process"
+    return {
+        "destination_port": destination_port,
+        "target_service": COMMON_TARGET_SERVICES.get(destination_port, f"Network service on port {destination_port}"),
+        "associated_process": process_name,
+        "associated_pid": process_pid,
+        "component_type": component_type,
+    }
+
+
 def classify(record):
     """Validate, classify, persist, correlate, and broadcast one completed flow."""
     global flow_count
@@ -321,6 +360,7 @@ def classify(record):
             src_ip_dict[source_ip] = src_ip_dict.get(source_ip, 0) + 1
 
         risk_display = detection.risk_level.replace("_", " ").title()
+        target_context = describe_target(metadata)
         metadata_values = [str(metadata[name]) for name in (
             "Src", "SrcPort", "Dest", "DestPort", "Protocol",
             "FlowStartTime", "FlowLastSeen", "PName", "PID",
@@ -369,6 +409,7 @@ def classify(record):
                 risk_level=detection.risk_level,
                 attack_probability=detection.attack_probability,
                 flow_id=assigned_flow_id,
+                **target_context,
             )
             incident_payload = incident.to_dict()
             azure_store.save_incident({**incident_payload, "sensor_id": cloud_reporter.sensor_id})
@@ -596,6 +637,11 @@ def ingest_sensor_event():
             raise ValueError("invalid risk")
         probability = min(max(float(payload.get("max_attack_probability", 0.0)), 0.0), 1.0)
         sensor_id = str(payload.get("sensor_id", "unknown-sensor"))[:128]
+        destination_port = str(payload.get("destination_port", "unknown"))[:16]
+        target_service = str(payload.get("target_service", "Unknown network service"))[:128]
+        associated_process = str(payload.get("associated_process", "Not resolved"))[:128]
+        associated_pid = str(payload.get("associated_pid", ""))[:32]
+        component_type = str(payload.get("component_type", "Network endpoint/service"))[:64]
     except (KeyError, TypeError, ValueError):
         return jsonify({"error": "invalid_sensor_event"}), 400
 
@@ -607,12 +653,17 @@ def ingest_sensor_event():
         risk_level=risk_level,
         attack_probability=probability,
         flow_id=str(payload.get("latest_flow_id", "remote"))[:128],
+        destination_port=destination_port,
+        target_service=target_service,
+        associated_process=associated_process,
+        associated_pid=associated_pid,
+        component_type=component_type,
     )
     incident_payload = {**incident.to_dict(), "sensor_id": sensor_id}
     azure_store.save_incident(incident_payload)
     runtime_metrics.increment("cloud_sensor_events_total")
     row = [
-        incident.incident_id, source_ip, "", destination_ip, "", protocol,
+        incident.incident_id, source_ip, "", destination_ip, destination_port, protocol,
         incident_payload["first_seen"], incident_payload["last_seen"], sensor_id, "",
         classification, probability, risk_level.replace("_", " ").title(),
     ]
@@ -905,6 +956,7 @@ def detail():
         features = np.asarray(flow.iloc[0, 1:40], dtype=np.float64)
         detection = detection_engine.detect(features)
         risk = detection.risk_level.replace("_", " ").title()
+        target_context = describe_target(flow.iloc[0].to_dict())
         exp = None
         plot_div = None
         explanation_error = None
@@ -930,6 +982,7 @@ def detail():
             risk=risk,
             attack_type=detection.classification,
             attack_probability=detection.attack_probability * 100,
+            target_context=target_context,
             explanation_error=explanation_error,
         )
     except Exception as e:

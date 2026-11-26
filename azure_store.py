@@ -99,6 +99,11 @@ def save_incident(incident: dict[str, Any]) -> None:
         "max_attack_probability": float(incident.get("max_attack_probability", 0.0)),
         "latest_flow_id": str(incident.get("latest_flow_id", "")),
         "sensor_id": str(incident.get("sensor_id", "unknown")),
+        "destination_port": str(incident.get("destination_port", "unknown")),
+        "target_service": str(incident.get("target_service", "Unknown network service")),
+        "associated_process": str(incident.get("associated_process", "Not resolved")),
+        "associated_pid": str(incident.get("associated_pid", "")),
+        "component_type": str(incident.get("component_type", "Network endpoint/service")),
     }
     _table("netmaskincidents").upsert_entity(entity)
 
@@ -118,6 +123,11 @@ def _incident_payload(entity: dict[str, Any]) -> dict[str, Any]:
         "max_attack_probability": float(entity.get("max_attack_probability", 0.0)),
         "latest_flow_id": entity.get("latest_flow_id") or None,
         "sensor_id": entity.get("sensor_id", "unknown"),
+        "destination_port": entity.get("destination_port", "unknown"),
+        "target_service": entity.get("target_service", "Unknown network service"),
+        "associated_process": entity.get("associated_process", "Not resolved"),
+        "associated_pid": entity.get("associated_pid", ""),
+        "component_type": entity.get("component_type", "Network endpoint/service"),
     }
 
 

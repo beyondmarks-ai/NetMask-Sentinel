@@ -30,6 +30,11 @@ class Incident:
     last_seen: datetime = field(default_factory=_utc_now)
     max_attack_probability: float = 0.0
     latest_flow_id: int | str | None = None
+    destination_port: str = "unknown"
+    target_service: str = "Unknown network service"
+    associated_process: str = "Not resolved"
+    associated_pid: str = ""
+    component_type: str = "Network endpoint/service"
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -52,11 +57,12 @@ class IncidentManager:
 
     @staticmethod
     def correlation_key(
-        classification: str, source_ip: str, destination_ip: str, protocol: str
+        classification: str, source_ip: str, destination_ip: str, protocol: str,
+        destination_port: str = "unknown",
     ) -> str:
         return "|".join(
             value.strip().lower()
-            for value in (classification, source_ip, destination_ip, protocol)
+            for value in (classification, source_ip, destination_ip, protocol, destination_port)
         )
 
     def record(
@@ -69,16 +75,28 @@ class IncidentManager:
         risk_level: str,
         attack_probability: float,
         flow_id: int | str | None,
+        destination_port: str = "unknown",
+        target_service: str = "Unknown network service",
+        associated_process: str = "Not resolved",
+        associated_pid: str = "",
+        component_type: str = "Network endpoint/service",
         occurred_at: datetime | None = None,
     ) -> Incident:
         now = occurred_at or _utc_now()
-        key = self.correlation_key(classification, source_ip, destination_ip, protocol)
+        key = self.correlation_key(
+            classification, source_ip, destination_ip, protocol, destination_port
+        )
         with self._lock:
             existing = self._active_by_key.get(key)
             if existing and (now - existing.last_seen).total_seconds() <= self.window_seconds:
                 existing.event_count += 1
                 existing.last_seen = now
                 existing.latest_flow_id = flow_id
+                existing.destination_port = destination_port
+                existing.target_service = target_service
+                existing.associated_process = associated_process
+                existing.associated_pid = associated_pid
+                existing.component_type = component_type
                 existing.max_attack_probability = max(
                     existing.max_attack_probability, float(attack_probability)
                 )
@@ -99,6 +117,11 @@ class IncidentManager:
                 last_seen=now,
                 max_attack_probability=float(attack_probability),
                 latest_flow_id=flow_id,
+                destination_port=destination_port,
+                target_service=target_service,
+                associated_process=associated_process,
+                associated_pid=associated_pid,
+                component_type=component_type,
             )
             self._incidents.appendleft(incident)
             self._active_by_key[key] = incident

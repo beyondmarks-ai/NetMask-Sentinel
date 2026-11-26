@@ -69,6 +69,12 @@
                         <h2>Detected Attack Type: <strong>{{ attack_type }}</strong></h2>
                         <p class="risk-badge risk-{{ risk|lower|replace(' ', '_') }}">{{ risk }} risk</p>
                         <p><strong>{{ '%.1f%%'|format(attack_probability) }}</strong> overall attack probability</p>
+                        <hr>
+                        <h4>Observed target context</h4>
+                        <p><strong>Destination service:</strong> {{ target_context.target_service }} (port {{ target_context.destination_port }})</p>
+                        <p><strong>Associated local component:</strong> {{ target_context.component_type }}</p>
+                        <p><strong>Associated Windows process:</strong> {{ target_context.associated_process }}{% if target_context.associated_pid %} (PID {{ target_context.associated_pid }}){% endif %}</p>
+                        <p class="text-muted">Process association identifies a local process using one of the flow ports; it does not alone prove that Windows or the application was compromised.</p>
                     </div>
                 </div>
             </div>

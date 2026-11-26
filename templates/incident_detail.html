@@ -28,6 +28,9 @@
               <tr><th>Detected attack type</th><td><strong>{{ incident.classification }}</strong></td></tr>
               <tr><th>Observed source / possible attacker IP</th><td><strong>{{ incident.source_ip }}</strong></td></tr>
               <tr><th>Target computer IP</th><td><strong>{{ incident.destination_ip }}</strong></td></tr>
+              <tr><th>Target port/service</th><td>{{ incident.destination_port or 'unknown' }} — {{ incident.target_service or 'Unknown network service' }}</td></tr>
+              <tr><th>Observed component type</th><td><strong>{{ incident.component_type or 'Network endpoint/service' }}</strong></td></tr>
+              <tr><th>Associated Windows process</th><td>{{ incident.associated_process or 'Not resolved' }}{% if incident.associated_pid %} (PID {{ incident.associated_pid }}){% endif %}</td></tr>
               <tr><th>Network protocol</th><td>{{ incident.protocol }}</td></tr>
               <tr><th>AI attack probability</th><td>{{ '%.1f%%'|format((incident.max_attack_probability|float) * 100) }}</td></tr>
               <tr><th>Events correlated</th><td>{{ incident.event_count }}</td></tr>
@@ -39,6 +42,7 @@
             </tbody>
           </table>
         </div>
+        <div class="alert alert-warning">This identifies the observed network destination and associated local process. Network monitoring alone does not prove that Windows or an application was successfully compromised.</div>
         {% if full_flow_id is not none %}
           <a href="{{ url_for('detail', flow_id=full_flow_id) }}" class="btn btn-primary">Open Complete 39-Feature Analysis</a>
         {% else %}
